@@ -127,14 +127,13 @@
   function queueSequence() {
     scheduled = [];
     let now = context.currentTime;
-    let delta = (now - start_time) % beatsToSeconds(4.0);
+    let bar = Math.round((now - start_time) / beatsToSeconds(4.0));
+    let start = start_time + bar * beatsToSeconds(4.0);
 
     for (let ball of balls) {
       let drum = colors[ball.color] + ".wav";
-
-      //let time = ((now - start_time) % beatsToSeconds(4.0)) + beatsToSeconds(ball.beat);
       let time = beatsToSeconds(ball.beat);
-      playSound(drum, now + time);
+      playSound(drum, start + time);
     }
   }
 
