@@ -138,7 +138,9 @@
       let time = beatsToSeconds(ball.beat);
       playSound(drum, start + time);
     }
+    queued = true;
   }
+  var queued = false;    
 
 
   //------------------------------------------------------------------------
@@ -149,6 +151,12 @@
       beats = secondsToBeats((context.currentTime - start_time) % beatsToSeconds(4.0));
       draw(beats);
       window.requestAnimationFrame(tick);
+      if (beats > 3.5 && !queued) {
+        queueSequence();
+      }
+      else if (beats < 1 && queued) {
+        queued = false;
+      }
     }
   }
 
@@ -216,7 +224,7 @@
   //------------------------------------------------------------------------
   function playPause() {
     if (playing) {
-      clearInterval(timer);
+      //clearInterval(timer);
       stopSounds();
       document.getElementById("play-pause").innerHTML = "Play";
       playing = false;
@@ -224,7 +232,7 @@
     } else {
       start_time = context.currentTime;
       queueSequence();
-      timer = setInterval(function () { queueSequence(); } , beatsToSeconds(4.0) * 1000);
+      //timer = setInterval(function () { queueSequence(); } , beatsToSeconds(4.0) * 1000);
       document.getElementById("play-pause").innerHTML = "Stop";
       playing = true;
       tick(0);
@@ -232,7 +240,7 @@
       document.getElementById("video").play();
     }
   }
-  var timer = 0;
+  //var timer = 0;
   var start_time = 0;
 
 
