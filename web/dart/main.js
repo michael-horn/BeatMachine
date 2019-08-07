@@ -43,28 +43,44 @@ function Slot(row, col, color, drum, c) {
   this.col = col;
   this.color = color;
   this.drum = drum;
-  var r = 25;
-  var circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  this.r = 25;
+  this.circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
   
-  var x = col * r * 2 + r + 50;
-  var y = row * r * 2 + r + 25;
-  circle.setAttribute('cx', x);
-  circle.setAttribute('cy', y);
-  circle.setAttribute('r', r - 10);
-  circle.setAttribute('fill', '#0002');
-  circle.setAttribute('class', 'slot');
-  c.appendChild(circle);
+  var x = col * this.r * 2 + this.r + 50;
+  var y = row * this.r * 2 + this.r + 25;
+  this.circle.setAttribute('cx', x);
+  this.circle.setAttribute('cy', y);
+  this.circle.setAttribute('r', this.r - 10);
+  this.circle.setAttribute('fill', '#0002');
+  this.circle.setAttribute('class', 'slot');
+  c.appendChild(this.circle);
   var self = this;
-  circle.onclick = function() {
-    if (self.on) {
-      circle.setAttribute("fill", "#0002");
-      circle.setAttribute("r", r - 12);
+
+  this.circle.onclick = function(e) { 
+    console.log('click'); 
+    self.toggleCircle(); 
+  }
+  this.circle.ontouchstart = function(e) { 
+    console.log('touch down');
+    self.toggleCircle();
+    e.stopImmediatePropagation();
+    e.stopPropagation();
+  }
+  this.circle.ontouchend = function(e) {
+    console.log('touch up');
+  }
+
+
+  this.toggleCircle = function() {
+    if (this.on) {
+      this.circle.setAttribute("fill", "#0002");
+      this.circle.setAttribute("r", this.r - 12);
     } else {
-      circle.setAttribute("fill", self.color);
-      circle.setAttribute("r", r - 5);
-      playSound(self.drum + ".wav", 0);
+      this.circle.setAttribute("fill", this.color);
+      this.circle.setAttribute("r", this.r - 5);
+      playSound(this.drum + ".wav", 0);
     }
-    self.on = !self.on;
+    this.on = !this.on;
   }
 }
 
