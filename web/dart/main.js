@@ -81,7 +81,30 @@ function Slot(row, col, color, drum, c) {
       playSound(this.drum + ".wav", 0);
     }
     this.on = !this.on;
+    generateCode();
   }
+}
+
+
+function generateCode() {
+  var patterns = {
+    'kick' : [ '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-' ],
+    'snare' : [ '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-' ],
+    'hat' : [ '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-' ],
+    'tom' : [ '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-' ],
+    'clap' : [ '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-' ]
+  };
+
+  for (let slot of slots) {
+    if (slot.on) {
+      patterns[slot.drum][slot.col] = '*';
+    }
+  }
+  var code = "<h1>Python Code</h1>";
+  for (let drum in patterns) {
+    code += ('playNote(' + drum + ', "' + patterns[drum].join('') + ')<br>');
+  }
+  document.getElementById("code").innerHTML = code;
 }
 
 
@@ -230,5 +253,7 @@ window.onload = function() {
   context = new AudioContext();
     
   document.getElementById("play-button").onclick = playPause;
+
+  document.addEventListener('contextmenu', event => event.preventDefault());
 }
 
