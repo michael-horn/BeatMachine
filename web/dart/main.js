@@ -102,7 +102,7 @@ function generateCode() {
   }
   var code = "<h1>Python Code</h1>";
   for (let drum in patterns) {
-    code += ('playNote(' + drum + ', "' + patterns[drum].join('') + ')<br>');
+    code += ('playPattern(' + drum + ', "' + patterns[drum].join('') + '")<br>');
   }
   document.getElementById("code").innerHTML = code;
 }
