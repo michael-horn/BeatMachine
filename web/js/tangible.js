@@ -62,16 +62,16 @@ function beatsToSeconds(beats) {
 
 function beatsToX(beats) {
   let w = canvas.width - (cropLeft + cropRight);
-  let sliceWidth = w / 16.0;
-  return cropRight + sliceWidth * beats * 4.0 + sliceWidth * 0.5;
+  let beatWidth = w / 4.0;
+  return canvas.width - (cropLeft + beatWidth * beats);
 }
 
 
 function xToBeats(x) {
   let w = canvas.width - (cropLeft + cropRight);
-  let sliceWidth = w / 16.0;
-  x = x - (cropRight + sliceWidth * 0.5);
-  let p = 1.0 - x / w;
+  let beatWidth = w / 4.0;
+  x = (canvas.width - cropLeft - beatWidth * 0.25) - x;
+  let p = x / w;
   let slice = Math.round(p * 16.0);
   return slice / 4.0;
 }
@@ -128,7 +128,7 @@ function queueSequence() {
   let start = start_time + bar * beatsToSeconds(4.0);
 
   for (let ball of balls) {
-    let drum = colors[ball.color] + ".wav";
+    let drum = ball.drum + ".wav";
     let time = beatsToSeconds(ball.beat);
     playSound(drum, start + time);
   }
@@ -145,10 +145,10 @@ function tick(timestamp) {
     beats = secondsToBeats((context.currentTime - start_time) % beatsToSeconds(4.0));
     draw(beats);
     window.requestAnimationFrame(tick);
-    if (beats > 3.5 && !queued) {
+    if (beats > 2.5 && !queued) {
       queueSequence();
     }
-    else if (beats < 1 && queued) {
+    else if (beats < 2 && queued) {
       queued = false;
     }
   }
@@ -169,8 +169,6 @@ function draw(beats) {
     ctx.fillRect(0, h - cropBottom, w, cropBottom);
     ctx.fillRect(w - cropRight, 0, cropRight, h);
     ctx.fillRect(0, 0, w, cropTop);
-    ctx.translate(canvas.width, 0);
-    ctx.scale(-1, 1);
     ctx.lineWidth = 3;
     ctx.fillStyle = "gold";
     for (let ball of balls) {
@@ -184,8 +182,8 @@ function draw(beats) {
     }
     ctx.restore();
     ctx.beginPath();
-    ctx.moveTo(beatsToX(beats), 0);
-    ctx.lineTo(beatsToX(beats), canvas.height);
+    ctx.moveTo(beatsToX(beats), cropTop);
+    ctx.lineTo(beatsToX(beats), canvas.height - cropBottom);
     ctx.strokeStyle = "gold";
     ctx.lineWidth = 5;
     ctx.stroke();
@@ -198,14 +196,14 @@ function draw(beats) {
 //------------------------------------------------------------------------
 function foundBall(ball) {
   ball.cx = ball.x + ball.width / 2;
-  ball.cy = ball.y + ball.height / 2;
+  ball.cy = ball.y + ball.height;
   ball.r = ball.width / 2;
   if (ball.r <= 30 &&
-      ball.cx > cropRight && ball.cx < canvas.width - cropLeft &&
-      ball.cy > cropTop && ball.cy < canvas.height - (cropBottom - 15))
+      ball.cx > cropLeft && ball.cx < canvas.width - cropRight &&
+      ball.cy > cropTop && ball.cy < canvas.height - cropBottom)
   {
     ball.beat = xToBeats(ball.cx);
-    ball.slice = ball.beat * 4.0;
+    ball.slice = Math.floor(ball.beat * 4.0);
     ball.drum = colors[ball.color];
     balls.push(ball);
   }
@@ -226,7 +224,7 @@ function playPause() {
   } else {
     start_time = context.currentTime;
     queueSequence();
-    //timer = setInterval(function () { queueSequence(); } , beatsToSeconds(4.0) * 1000);
+    //timer = setInterval(function () { tick(); } , beatsToSeconds(0.125) * 1000);
     document.getElementById("play-pause").innerHTML = "Stop";
     playing = true;
     tick(0);
@@ -234,7 +232,7 @@ function playPause() {
     document.getElementById("video").play();
   }
 }
-//var timer = 0;
+var timer = 0;
 var start_time = 0;
 
 
@@ -243,28 +241,20 @@ var start_time = 0;
 //------------------------------------------------------------------------
 function formatCode() {
   if (playing) {
-    var code = "# TunePad Code\n";
-    code += "kick = 0\nsnare = 2\nhat = 4\ntom = 6\nclap = 10\n\n"
+    var patterns = {
+      'kick' : [ '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-' ],
+      'snare' : [ '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-' ],
+      'hat' : [ '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-' ],
+      'tom' : [ '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-' ],
+      'clap' : [ '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-' ]
+    };
 
-    let sorted = balls.sort(function(a, b) {
-      let val = (b.beat - a.beat);
-      return (val === 0.0)? a.drum.localeCompare(b.drum) : val;
-    });
-
-    for (let i=0; i<16; i++) {
-      let notes = new Set();
-      for (let ball of sorted) {
-        if (ball.slice == i) {
-          notes.add(ball.drum);
-        }
-      }
-      if (notes.size == 0) {
-        code += `rest(0.25)\n`;
-      } else if (notes.size == 1) {
-        code += `playNote(${[...notes][0]}, beats=0.25)\n`;
-      } else {
-        code += `playNote([${[...notes].join(", ")}], beats=0.25)\n`;
-      }
+    for (let ball of balls) {
+      patterns[ball.drum][ball.slice] = '*';
+    }
+    var code = "<h1>Python Code</h1>";
+    for (let drum in patterns) {
+      code += ('playPattern(' + drum + ', "' + patterns[drum].join('') + '")<br>');
     }
     document.getElementById("code").innerHTML = code;
   }
@@ -274,13 +264,37 @@ function formatCode() {
 //------------------------------------------------------------------------
 // calibrate ball colors
 //------------------------------------------------------------------------
-tracking.ColorTracker.registerColor('blue', (r, g, b) => (r < 30 && g < 60 && b > 80));
-tracking.ColorTracker.registerColor('orange', (r, g, b) => (r > 120 && g > 30 && g < 100 && b < 30));
-tracking.ColorTracker.registerColor('green', (r, g, b) => (r > 50 && r < 100 && g > 90 && b < 90));
-tracking.ColorTracker.registerColor('purple', (r, g, b) => (r > 80 && g < 60 && b > 80));
-tracking.ColorTracker.registerColor('cyan', (r, g, b) => (r > 40 && r < 100 && g > 80 && g < 150 && b > 90));
-tracking.ColorTracker.registerColor('aqua', (r, g, b) => (r > 90 && r < 130 && g > 190 && b > 170));
+tracking.ColorTracker.registerColor('blue', isBlue);
+tracking.ColorTracker.registerColor('orange', isOrange);
+tracking.ColorTracker.registerColor('green', isGreen);
+tracking.ColorTracker.registerColor('purple', isPurple);
+tracking.ColorTracker.registerColor('cyan', isCyan);
+tracking.ColorTracker.registerColor('aqua', isAqua);
 
+
+function isBlue(r, g, b) {
+  return (r < 30 && g < 60 && b > 80);
+}
+
+function isCyan(r, g, b) {
+  return !isBlue(r, g, b) && (r > 40 && r < 100 && g > 80 && g < 150 && b > 90);
+}
+
+function isAqua(r, g, b) {
+  return !isBlue(r, g, b) && (r > 90 && r < 130 && g > 190 && b > 170);
+}
+
+function isPurple(r, g, b) {
+  return (r > 80 && g < 60 && b > 80);
+}
+
+function isGreen(r, g, b) {
+  return (r > 50 && r < 100 && g > 90 && b < 90);
+}
+
+function isOrange(r, g, b) {
+  return (r > 120 && g > 30 && g < 100 && b < 30);
+}
 
 window.onload = function() {
   canvas = document.getElementById('canvas');
@@ -319,16 +333,18 @@ window.onload = function() {
         cropRight += 5;
         break;
       case 187:
-        cropLeft -= 2;
-        cropRight -= 2;
-        cropTop -= 2;
-        cropBottom -= 2;
+        cropLeft -= 3;
+        cropRight -= 3;
+        cropTop -= 1;
+        cropBottom -= 1;
         break;
       case 189:
-        cropLeft += 2;
-        cropRight += 2;
-        cropTop += 2;
-        cropBottom += 2;
+        cropLeft += 3;
+        cropRight += 3;
+        cropTop += 1;
+        cropBottom += 1;
+        break;
+      case 70:  // 'f'
         break;
     }
   }
