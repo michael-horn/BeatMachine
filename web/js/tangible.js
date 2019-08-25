@@ -208,7 +208,7 @@ function foundBall(ball) {
   ball.cy = ball.y + ball.height;
   ball.r = ball.width / 2;
   if (ball.r <= 30 &&
-      ball.cx > cropLeft && ball.cx < canvas.width - cropLeft &&
+      ball.cx > cropLeft && ball.cx < canvas.width - cropRight &&
       ball.cy > cropTop && ball.cy < canvas.height - cropBottom)
   {
     ball.beat = xToBeats(ball.cx);
