@@ -43,8 +43,7 @@ var colors = {
   "purple" : "snare",
   "orange" : "hat",
   "green" : "tom",
-  "cyan" : "clap",
-  "aqua" : "clap"
+  "cyan" : "clap"
 };
 
 
@@ -63,19 +62,19 @@ function beatsToSeconds(beats) {
 function beatsToX(beats) {
   let w = canvas.width - (cropLeft + cropRight);
   let beatWidth = w / 4.0;
-  return canvas.width - (cropLeft + beatWidth * beats);
+  return cropLeft + beatWidth * beats + beatWidth * 0.125;
 }
 
 
 function xToBeats(x) {
   let w = canvas.width - (cropLeft + cropRight);
   let beatWidth = w / 4.0;
-  x = (canvas.width - cropRight - beatWidth * 0.25) - x;
+  x -= cropLeft;
+  x -= beatWidth * 0.125;
   let p = x / w;
   let slice = Math.round(p * 16.0);
   return slice / 4.0;
 }
-
 
 
 //------------------------------------------------------------------------
@@ -163,12 +162,28 @@ function draw(beats) {
     let w = canvas.width;
     let h = canvas.height;
     ctx.save();
+    ctx.translate(w, 0);
+    ctx.scale(-1, 1);
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = "black";
     ctx.fillRect(0, 0, cropLeft, h);
     ctx.fillRect(0, h - cropBottom, w, cropBottom);
     ctx.fillRect(w - cropRight, 0, cropRight, h);
     ctx.fillRect(0, 0, w, cropTop);
+
+    ctx.beginPath();
+    ctx.moveTo(beatsToX(beats), cropTop);
+    ctx.lineTo(beatsToX(beats), canvas.height - cropBottom);
+    ctx.strokeStyle = "gold";
+    ctx.lineWidth = 5;
+    ctx.stroke();
+
+    for (let i=0; i<4.0; i += 0.25) {
+      ctx.fillStyle = "white";
+      ctx.font = "15px sans-serif";
+      ctx.fillText("|", beatsToX(i), canvas.height - cropBottom + 18);
+    }
+
     ctx.lineWidth = 3;
     ctx.fillStyle = "gold";
     for (let ball of balls) {
@@ -181,12 +196,6 @@ function draw(beats) {
       }
     }
     ctx.restore();
-    ctx.beginPath();
-    ctx.moveTo(beatsToX(beats), cropTop);
-    ctx.lineTo(beatsToX(beats), canvas.height - cropBottom);
-    ctx.strokeStyle = "gold";
-    ctx.lineWidth = 5;
-    ctx.stroke();
   }
 }
 
@@ -195,11 +204,11 @@ function draw(beats) {
 // tracker callback function
 //------------------------------------------------------------------------
 function foundBall(ball) {
-  ball.cx = ball.x + ball.width / 2;
+  ball.cx = canvas.width - (ball.x + ball.width / 2);
   ball.cy = ball.y + ball.height;
   ball.r = ball.width / 2;
   if (ball.r <= 30 &&
-      ball.cx > cropLeft && ball.cx < canvas.width - cropRight &&
+      ball.cx > cropLeft && ball.cx < canvas.width - cropLeft &&
       ball.cy > cropTop && ball.cy < canvas.height - cropBottom)
   {
     ball.beat = xToBeats(ball.cx);
@@ -269,52 +278,82 @@ tracking.ColorTracker.registerColor('orange', isOrange);
 tracking.ColorTracker.registerColor('green', isGreen);
 tracking.ColorTracker.registerColor('purple', isPurple);
 tracking.ColorTracker.registerColor('cyan', isCyan);
-//tracking.ColorTracker.registerColor('aqua', isAqua);
 
 
 function isBlue(r, g, b) {
-  return (r < 60 && g < 150 && b > 130);
+  return colorMatch("blue", r, g, b);
 }
 
 function isCyan(r, g, b) {
-  return !isBlue(r, g, b) && (r > 20 && r < 100 && g > 150 && b > 150);
+  return colorMatch("cyan", r, g, b);
+  //return !isBlue(r, g, b) && (r > 20 && r < 100 && g > 150 && b > 150);
 }
 
-//function isAqua(r, g, b) {
-//  return !isBlue(r, g, b) && (r > 90 && r < 130 && g > 190 && b > 170);
-//}
-
 function isPurple(r, g, b) {
-  return (r > 180 && g < 110 && b > 150);
+  return colorMatch("purple", r, g, b);
+  //return (r > 180 && g < 110 && b > 150);
 }
 
 function isGreen(r, g, b) {
-  return (r > 100 && r < 200 && g > 150 && b < 150);
+  return colorMatch("green", r, g, b);
+  //return (r > 100 && r < 200 && g > 150 && b < 150);
 }
 
 function isOrange(r, g, b) {
-  return (r > 200 && g > 130 && b < 80);
+  return colorMatch("orange", r, g, b);
+  //return (r > 200 && g > 130 && b < 80);
 }
+
+
+function colorMatch(name, r, g, b) {
+  let R = colorDefs[name + "-r"];
+  let G = colorDefs[name + "-g"];
+  let B = colorDefs[name + "-b"];
+  let S = colorDefs[name + "-s"];
+  return (r >= R-S && r <= R+S && 
+          g >= G-S && g <= G+S &&
+          b >= B-S && b <= B+S);
+}
+
+
+function calibrate() {
+  colorDefs = { };
+  for (let color in colors) {
+    colorDefs[color + "-r"] = Math.min(255, Math.max(0, parseInt(document.getElementById(color + "-r").value, 10)));
+    colorDefs[color + "-g"] = Math.min(255, Math.max(0, parseInt(document.getElementById(color + "-g").value, 10)));
+    colorDefs[color + "-b"] = Math.min(255, Math.max(0, parseInt(document.getElementById(color + "-b").value, 10)));
+    colorDefs[color + "-s"] = Math.min(255, Math.max(0, parseInt(document.getElementById(color + "-s").value, 10)));
+  }
+  console.log(colorDefs);
+}
+
+
+
+
+var colorDefs;
+var tracker;
 
 window.onload = function() {
   canvas = document.getElementById('canvas');
   ctx = canvas.getContext('2d');
 
+  calibrate();
+
   // tracker callback function for each video frame
   //var tracker = new tracking.ColorTracker([ 'blue', 'cyan', 'green', 'orange', 'purple' ]);
-  var tracker = new tracking.ColorTracker([ 'blue', 'green', 'cyan', 'orange', 'purple' ]);
+  tracker = new tracking.ColorTracker([ 'blue', 'green', 'cyan', 'orange', 'purple' ]);
   tracker.minDimension = 18;
   tracker.on('track', function(event) {
     balls = [];
     event.data.forEach(foundBall);
     formatCode();
   });
-
   // start the tracker
   tracking.track('#video', tracker, { camera : true });
 
+
   document.onkeydown = function(k) {
-    console.log(k.keyCode);
+    //console.log(k.keyCode);
     switch(k.keyCode) {
       case 38:
         cropTop -= 5;
