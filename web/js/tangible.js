@@ -70,7 +70,7 @@ function beatsToX(beats) {
 function xToBeats(x) {
   let w = canvas.width - (cropLeft + cropRight);
   let beatWidth = w / 4.0;
-  x = (canvas.width - cropLeft - beatWidth * 0.25) - x;
+  x = (canvas.width - cropRight - beatWidth * 0.25) - x;
   let p = x / w;
   let slice = Math.round(p * 16.0);
   return slice / 4.0;
@@ -269,31 +269,31 @@ tracking.ColorTracker.registerColor('orange', isOrange);
 tracking.ColorTracker.registerColor('green', isGreen);
 tracking.ColorTracker.registerColor('purple', isPurple);
 tracking.ColorTracker.registerColor('cyan', isCyan);
-tracking.ColorTracker.registerColor('aqua', isAqua);
+//tracking.ColorTracker.registerColor('aqua', isAqua);
 
 
 function isBlue(r, g, b) {
-  return (r < 30 && g < 60 && b > 80);
+  return (r < 60 && g < 150 && b > 130);
 }
 
 function isCyan(r, g, b) {
-  return !isBlue(r, g, b) && (r > 40 && r < 100 && g > 80 && g < 150 && b > 90);
+  return !isBlue(r, g, b) && (r > 20 && r < 100 && g > 150 && b > 150);
 }
 
-function isAqua(r, g, b) {
-  return !isBlue(r, g, b) && (r > 90 && r < 130 && g > 190 && b > 170);
-}
+//function isAqua(r, g, b) {
+//  return !isBlue(r, g, b) && (r > 90 && r < 130 && g > 190 && b > 170);
+//}
 
 function isPurple(r, g, b) {
-  return (r > 80 && g < 60 && b > 80);
+  return (r > 180 && g < 110 && b > 150);
 }
 
 function isGreen(r, g, b) {
-  return (r > 50 && r < 100 && g > 90 && b < 90);
+  return (r > 100 && r < 200 && g > 150 && b < 150);
 }
 
 function isOrange(r, g, b) {
-  return (r > 120 && g > 30 && g < 100 && b < 30);
+  return (r > 200 && g > 130 && b < 80);
 }
 
 window.onload = function() {
@@ -302,7 +302,7 @@ window.onload = function() {
 
   // tracker callback function for each video frame
   //var tracker = new tracking.ColorTracker([ 'blue', 'cyan', 'green', 'orange', 'purple' ]);
-  var tracker = new tracking.ColorTracker([ 'blue', 'green', 'cyan', 'aqua', 'orange', 'purple' ]);
+  var tracker = new tracking.ColorTracker([ 'blue', 'green', 'cyan', 'orange', 'purple' ]);
   tracker.minDimension = 18;
   tracker.on('track', function(event) {
     balls = [];
