@@ -39,6 +39,13 @@
     font-size: 18px;
     line-height: 180%;
   }
+  .control-row {
+    height: 50px;
+  }
+  .control-name { 
+    width: 120px;
+    display: inline-block;
+  }
   </style>
 </head>
 <body>
@@ -51,6 +58,42 @@
       <canvas id="canvas" width="720" height="600"></canvas>
     </div>
     <pre id="code"></pre>
+    <div class="controls">
+    <div class="control-row">
+        <span class="control-name">Blue (RGBS):</span>
+        <input type="number" min="0" max="255" step="1" id="blue-r" value="50" onchange="calibrate()">
+        <input type="number" min="0" max="255" step="1" id="blue-g" value="150" onchange="calibrate()">
+        <input type="number" min="0" max="255" step="1" id="blue-b" value="150" onchange="calibrate()">
+        <input type="number" min="0" max="255" step="1" id="blue-s" value="40" onchange="calibrate()">
+    </div>
+    <div class="control-row">
+        <span class="control-name">Green (RGBS):</span>
+        <input type="number" min="0" max="255" step="1" id="green-r" value="100" onchange="calibrate()">
+        <input type="number" min="0" max="255" step="1" id="green-g" value="170" onchange="calibrate()">
+        <input type="number" min="0" max="255" step="1" id="green-b" value="80" onchange="calibrate()">
+        <input type="number" min="0" max="255" step="1" id="green-s" value="40" onchange="calibrate()">
+    </div>
+    <div class="control-row">
+        <span class="control-name">Cyan (RGBS):</span>
+        <input type="number" min="0" max="255" step="1" id="cyan-r" value="85" onchange="calibrate()">
+        <input type="number" min="0" max="255" step="1" id="cyan-g" value="200" onchange="calibrate()">
+        <input type="number" min="0" max="255" step="1" id="cyan-b" value="200" onchange="calibrate()">
+        <input type="number" min="0" max="255" step="1" id="cyan-s" value="40" onchange="calibrate()">
+    </div>
+    <div class="control-row">
+        <span class="control-name">Purple (RGBS):</span>
+        <input type="number" min="0" max="255" step="1" id="purple-r" value="180" onchange="calibrate()">
+        <input type="number" min="0" max="255" step="1" id="purple-g" value="80" onchange="calibrate()">
+        <input type="number" min="0" max="255" step="1" id="purple-b" value="180" onchange="calibrate()">
+        <input type="number" min="0" max="255" step="1" id="purple-s" value="40" onchange="calibrate()">
+    </div>
+    <div class="control-row">
+        <span class="control-name">Orange (RGBS):</span>
+        <input type="number" min="0" max="255" step="1" id="orange-r" value="210" onchange="calibrate()">
+        <input type="number" min="0" max="255" step="1" id="orange-g" value="100" onchange="calibrate()">
+        <input type="number" min="0" max="255" step="1" id="orange-b" value="50" onchange="calibrate()">
+        <input type="number" min="0" max="255" step="1" id="orange-s" value="40" onchange="calibrate()">
+    </div>    
   </div>
 
 <script src="js/tangible.js"></script>
