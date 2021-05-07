@@ -3,10 +3,9 @@
 //----------------------------------------------------------------------
 // use to calibrate the current camera setup
 //----------------------------------------------------------------------
-var cropLeft = 70;
-var cropRight = 70;
-var cropTop = 280;
-var cropBottom = 130;
+const ROWS = 5;
+const COLS = 16;
+var crop = [ 0, 0, 640, 480 ];
 
 var bpm = 90.0;   // beats per minute
 
@@ -14,10 +13,12 @@ var bpm = 90.0;   // beats per minute
 var context = new AudioContext();
 var sound_prefix = "sounds/";
 var drumBuffers = { };
-var playing = false;
+var playing = false;   // is beat machine playing or paused
 var scheduled = [ ];  // scheduled audio buffers
 var canvas;
 var ctx; // canvas rendering context
+var video;  // <video> element
+
 
 //------------------------------------------------------------------------
 // pre-load the drum samples
@@ -48,109 +49,60 @@ var colors = {
 
 
 
-function secondsToBeats(s) {
-  return s * bpm / 60.0;
-}
-
-
-
-function beatsToSeconds(beats) {
-  return 60.0 * beats / bpm;
-}
-
-
-function beatsToX(beats) {
-  let w = canvas.width - (cropLeft + cropRight);
-  let beatWidth = w / 4.0;
-  return cropLeft + beatWidth * beats + beatWidth * 0.125;
-}
-
-
-function xToBeats(x) {
-  let w = canvas.width - (cropLeft + cropRight);
-  let beatWidth = w / 4.0;
-  x -= cropLeft;
-  x -= beatWidth * 0.125;
-  let p = x / w;
-  let slice = Math.round(p * 16.0);
-  return slice / 4.0;
-}
-
-
 //------------------------------------------------------------------------
-// stop all sounds
+// start / stop video tracking
 //------------------------------------------------------------------------
-function stopSounds() {
-  for (let sound of scheduled) { sound.stop(0); }
-  scheduled = [];
-}
-
-
-//------------------------------------------------------------------------
-// schedule sound to be played
-//------------------------------------------------------------------------
-function playSound(name, time) {
-  var buffer = drumBuffers[name]; 
-  var source = context.createBufferSource(); // creates a sound source
-  source.buffer = buffer;                    // tell the source which sound to play
-  source.connect(context.destination);       // connect the source to the context's destination (the speakers)
-  source.start(time);  
-  scheduled.push(source);
-}
-
-
-//------------------------------------------------------------------------
-// load drum sound from the given url
-//------------------------------------------------------------------------
-function loadDrumSound(name) {
-  let url = sound_prefix + name;
-  let request = new XMLHttpRequest();
-  request.open('GET', url, true);
-  request.responseType = 'arraybuffer';
-
-  request.onload = function() {
-    context.decodeAudioData(request.response, function(buffer) {
-      drumBuffers[name] = buffer; 
-    }, function () { console.log("error loading audio")});
+var videoStream = null;
+function startStop() {
+  var video = document.querySelector("#video");
+  if (videoStream != null) {
+    //trackerTask.stop();
+    videoStream.getTracks().forEach(function(track) { track.stop(); });
+    videoStream = null;
+    document.getElementById("video-button").innerHTML = "Start Video";
   }
-  request.send();
-}
-
-
-//------------------------------------------------------------------------
-// queue sequence of balls to start playback
-//------------------------------------------------------------------------
-function queueSequence() {
-  scheduled = [];
-  let now = context.currentTime;
-  let bar = Math.round((now - start_time) / beatsToSeconds(4.0));
-  let start = start_time + bar * beatsToSeconds(4.0);
-
-  for (let ball of balls) {
-    let drum = ball.drum + ".wav";
-    let time = beatsToSeconds(ball.beat);
-    playSound(drum, start + time);
+  else {
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(function (s) {
+        videoStream = s;
+        video.srcObject = s;
+        video.onloadedmetadata = function(e) { video.play(); };
+        document.getElementById("video-button").innerHTML = "Stop Video";
+        tick(0);
+      })
+      .catch(function (err) { console.log("Unable to start video stream!"); });
   }
-  queued = true;
 }
-var queued = false;    
 
 
 //------------------------------------------------------------------------
-// while playing redraw the screen and schedule each new measure
+// scan an image for color match
 //------------------------------------------------------------------------
-function tick(timestamp) {
-  if (playing) {
-    beats = secondsToBeats((context.currentTime - start_time) % beatsToSeconds(4.0));
-    draw(beats);
-    window.requestAnimationFrame(tick);
-    if (beats > 2.5 && !queued) {
-      queueSequence();
-    }
-    else if (beats < 2 && queued) {
-      queued = false;
+function scanRect(idata, bx, by, bw, bh, cw) {
+  bx = Math.round(bx);
+  by = Math.round(by);
+  let count = 0, r = 0, g = 0, b = 0;
+  for (let y = 0; y < bh; y++) {
+    for (let x = 0; x < bw; x++) {
+      let index = ((y + by) * cw + (x + bx)) * 4;
+      r += idata.data[index + 0];
+      g += idata.data[index + 1];
+      b += idata.data[index + 2];
+      count ++;
     }
   }
+  return [ r/count, g/count, b/count ];
+}
+
+
+//------------------------------------------------------------------------
+// distance between two colors
+//------------------------------------------------------------------------
+function colorDistance(a, b) {
+  return Math.sqrt(
+    (b[0] - a[0]) * (b[0] - a[0]) +
+    (b[1] - a[1]) * (b[1] - a[1]) +
+    (b[2] - a[2]) * (b[2] - a[2]));
 }
 
 
@@ -161,16 +113,57 @@ function draw(beats) {
   if (canvas && ctx) {
     let w = canvas.width;
     let h = canvas.height;
-    ctx.save();
-    ctx.translate(w, 0);
-    ctx.scale(-1, 1);
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = "black";
-    ctx.fillRect(0, 0, cropLeft, h);
-    ctx.fillRect(0, h - cropBottom, w, cropBottom);
-    ctx.fillRect(w - cropRight, 0, cropRight, h);
-    ctx.fillRect(0, 0, w, cropTop);
+    let cx = crop[0];
+    let cy = crop[1];
+    let cw = Math.max(crop[2], 1);
+    let ch = Math.max(crop[3], 1);
+    let bw = cw / COLS;
+    let bh = ch / ROWS;
 
+    ctx.save();
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.drawImage(video, cx, cy, cw, ch, cx, cy, cw, ch);
+    let idata = ctx.getImageData(cx, cy, cw, ch);
+    let m = bw / 4.0;
+
+    for (let i=0; i<16; i++) {
+      for (let j=0; j<5; j++) {
+        let bx = i * bw;
+        let by = j * bh;
+        let scan = scanRect(idata, bx + m, by + m, bw - m * 2, bh - m * 2, cw);
+
+        let dist = colorDistance([0, 0, 0], scan);
+        let dR = colorDistance([255, 0, 0], scan);
+        let dG = colorDistance([100, 255, 100], scan);
+        let dB = colorDistance([ 0, 0, 255], scan);
+        let dO = colorDistance([ 255, 200, 0], scan);
+        let color = 'rgba(0,0,0,0)';
+        if (dR < dist) {
+          color = 'red';
+          dist = dR;
+        }
+        if (dG < dist) {
+          color = 'green';
+          dist = dG;
+        }
+        if (dB < dist) {
+          color = 'blue';
+          dist = dB;
+        }
+        if (dO < dist) {
+          color = 'orange';
+          dist = dO;
+        }
+        //ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(cx + bx + bw/2, cy + by + bh/2, m, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+/*
     ctx.beginPath();
     ctx.moveTo(beatsToX(beats), cropTop);
     ctx.lineTo(beatsToX(beats), canvas.height - cropBottom);
@@ -195,29 +188,125 @@ function draw(beats) {
         ctx.fill();
       }
     }
+    */
     ctx.restore();
   }
 }
 
 
-//------------------------------------------------------------------------
-// tracker callback function
-//------------------------------------------------------------------------
-function foundBall(ball) {
-  ball.cx = canvas.width - (ball.x + ball.width / 2);
-  ball.cy = ball.y + ball.height;
-  ball.r = ball.width / 2;
-  if (ball.r <= 30 &&
-      ball.cx > cropLeft && ball.cx < canvas.width - cropRight &&
-      ball.cy > cropTop && ball.cy < canvas.height - cropBottom)
-  {
-    ball.beat = xToBeats(ball.cx);
-    ball.slice = Math.floor(ball.beat * 4.0);
-    ball.drum = colors[ball.color];
-    balls.push(ball);
-  }
+
+function isRunning() {
+  return videoStream != null;
 }
 
+
+
+function secondsToBeats(s) {
+  return s * bpm / 60.0;
+}
+
+
+
+function beatsToSeconds(beats) {
+  return 60.0 * beats / bpm;
+}
+
+
+function beatsToX(beats) {
+  let cw = crop[3];
+  let beatWidth = cw / 4.0;
+  return crop[0] + beatWidth * beats + beatWidth * 0.125;
+}
+
+
+function xToBeats(x) {
+  let cw = crop[3];
+  let beatWidth = cw / 4.0;
+  x -= crop[0];
+  x -= beatWidth * 0.125;
+  let p = x / cw;
+  let slice = Math.round(p * 16.0);
+  return slice / 4.0;
+}
+
+
+//------------------------------------------------------------------------
+// stop all sounds
+//------------------------------------------------------------------------
+function stopSounds() {
+  for (let sound of scheduled) { sound.stop(0); }
+  scheduled = [];
+}
+
+
+//------------------------------------------------------------------------
+// schedule sound to be played
+//------------------------------------------------------------------------
+function playSound(name, time) {
+  var buffer = drumBuffers[name];
+  var source = context.createBufferSource(); // creates a sound source
+  source.buffer = buffer;                    // tell the source which sound to play
+  source.connect(context.destination);       // connect the source to the context's destination (the speakers)
+  source.start(time);
+  scheduled.push(source);
+}
+
+
+//------------------------------------------------------------------------
+// load drum sound from the given url
+//------------------------------------------------------------------------
+function loadDrumSound(name) {
+  let url = sound_prefix + name;
+  let request = new XMLHttpRequest();
+  request.open('GET', url, true);
+  request.responseType = 'arraybuffer';
+
+  request.onload = function() {
+    context.decodeAudioData(request.response, function(buffer) {
+      drumBuffers[name] = buffer;
+    }, function () { console.log("error loading audio")});
+  }
+  request.send();
+}
+
+
+//------------------------------------------------------------------------
+// queue sequence of balls to start playback
+//------------------------------------------------------------------------
+function queueSequence() {
+  scheduled = [];
+  let now = context.currentTime;
+  let bar = Math.round((now - start_time) / beatsToSeconds(4.0));
+  let start = start_time + bar * beatsToSeconds(4.0);
+
+  for (let ball of balls) {
+    let drum = ball.drum + ".wav";
+    let time = beatsToSeconds(ball.beat);
+    playSound(drum, start + time);
+  }
+  queued = true;
+}
+var queued = false;
+
+
+//------------------------------------------------------------------------
+// while playing redraw the screen and schedule each new measure
+//------------------------------------------------------------------------
+function tick(timestamp) {
+  if (isRunning()) {
+    draw(0);
+    window.requestAnimationFrame(tick);
+  }
+  if (playing) {
+    beats = secondsToBeats((context.currentTime - start_time) % beatsToSeconds(4.0));
+    if (beats > 2.5 && !queued) {
+      queueSequence();
+    }
+    else if (beats < 2 && queued) {
+      queued = false;
+    }
+  }
+}
 
 
 //------------------------------------------------------------------------
@@ -229,20 +318,19 @@ function playPause() {
     stopSounds();
     document.getElementById("play-pause").innerHTML = "Play";
     playing = false;
-    document.getElementById("video").pause();
   } else {
     start_time = context.currentTime;
     queueSequence();
     //timer = setInterval(function () { tick(); } , beatsToSeconds(0.125) * 1000);
-    document.getElementById("play-pause").innerHTML = "Stop";
+    document.getElementById("play-pause").innerHTML = "Pause";
     playing = true;
-    tick(0);
-    formatCode();
-    document.getElementById("video").play();
+    //trackerTask.run();
+    //formatCode();
   }
 }
 var timer = 0;
 var start_time = 0;
+
 
 
 //------------------------------------------------------------------------
@@ -269,17 +357,6 @@ function formatCode() {
   }
 }
 
-
-//------------------------------------------------------------------------
-// calibrate ball colors
-//------------------------------------------------------------------------
-tracking.ColorTracker.registerColor('blue', isBlue);
-tracking.ColorTracker.registerColor('orange', isOrange);
-tracking.ColorTracker.registerColor('green', isGreen);
-tracking.ColorTracker.registerColor('purple', isPurple);
-tracking.ColorTracker.registerColor('cyan', isCyan);
-
-
 function isBlue(r, g, b) {
   return colorMatch("blue", r, g, b);
 }
@@ -305,89 +382,46 @@ function isOrange(r, g, b) {
 }
 
 
-function colorMatch(name, r, g, b) {
-  let R = colorDefs[name + "-r"];
-  let G = colorDefs[name + "-g"];
-  let B = colorDefs[name + "-b"];
-  let S = colorDefs[name + "-s"];
-  return (r >= R-S && r <= R+S && 
-          g >= G-S && g <= G+S &&
-          b >= B-S && b <= B+S);
-}
-
-
-function calibrate() {
-  colorDefs = { };
-  for (let color in colors) {
-    colorDefs[color + "-r"] = Math.min(255, Math.max(0, parseInt(document.getElementById(color + "-r").value, 10)));
-    colorDefs[color + "-g"] = Math.min(255, Math.max(0, parseInt(document.getElementById(color + "-g").value, 10)));
-    colorDefs[color + "-b"] = Math.min(255, Math.max(0, parseInt(document.getElementById(color + "-b").value, 10)));
-    colorDefs[color + "-s"] = Math.min(255, Math.max(0, parseInt(document.getElementById(color + "-s").value, 10)));
-  }
-  console.log(colorDefs);
-}
-
-
-
-
-var colorDefs;
-var tracker;
-
 window.onload = function() {
-  canvas = document.getElementById('canvas');
+  video = document.querySelector("#video");
+  canvas = document.querySelector('#canvas');
   ctx = canvas.getContext('2d');
 
-  calibrate();
-
-  // tracker callback function for each video frame
-  //var tracker = new tracking.ColorTracker([ 'blue', 'cyan', 'green', 'orange', 'purple' ]);
-  tracker = new tracking.ColorTracker([ 'blue', 'green', 'cyan', 'orange', 'purple' ]);
-  tracker.minDimension = 18;
-  tracker.on('track', function(event) {
-    balls = [];
-    event.data.forEach(foundBall);
-    formatCode();
-  });
-  // start the tracker
-  tracking.track('#video', tracker, { camera : true });
-
+  let dragging = false;
+  canvas.onmousedown = function(e) {
+    crop[0] = e.offsetX;
+    crop[1] = e.offsetY;
+    crop[2] = 0;
+    crop[3] = 0;
+    dragging = true;
+  }
+  canvas.onmousemove = function(e) {
+    if (dragging) {
+      crop[2] = e.offsetX - crop[0];
+      crop[3] = e.offsetY - crop[1];
+    }
+  }
+  canvas.onmouseup = function(e) {
+    if (crop[2] <= 0 || crop[3] <= 0) {
+      crop = [ 0, 0, canvas.width, canvas.height ];
+    }
+    dragging = false;
+  }
 
   document.onkeydown = function(k) {
     //console.log(k.keyCode);
     switch(k.keyCode) {
-      case 38:
-        cropTop -= 5;
-        cropBottom += 5;
+      case 38: crop[1] -= 1; break;
+      case 40: crop[1] += 1; break;
+      case 39: crop[0] += 1; break;
+      case 37: crop[0] -= 1; break;
+      case 187: // zoom in
         break;
-      case 40:
-        cropTop += 5;
-        cropBottom -= 5;
-        break;
-      case 39:
-        cropLeft += 5;
-        cropRight -= 5;
-        break;
-      case 37:
-        cropLeft -= 5;
-        cropRight += 5;
-        break;
-      case 187:
-        cropLeft -= 3;
-        cropRight -= 3;
-        cropTop -= 1;
-        cropBottom -= 1;
-        break;
-      case 189:
-        cropLeft += 3;
-        cropRight += 3;
-        cropTop += 1;
-        cropBottom += 1;
+      case 189:  // zoom out
         break;
       case 70:  // 'f'
+        console.log(crop);
         break;
     }
   }
 }
-
-
-
