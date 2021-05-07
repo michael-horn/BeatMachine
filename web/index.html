@@ -3,7 +3,6 @@
 <head>
   <meta charset="utf-8">
   <title>Drum Machine</title>
-  <script src="js/tracking-min.js"></script>
 
   <style>
 
@@ -23,9 +22,9 @@
     top: 0;
     left: 0;
     position: absolute;
-    transform: scale(-1, -1);
+    /*transform: scale(-1, -1);*/
   }
-  
+
   #video {
   }
   #code {
@@ -42,7 +41,7 @@
   .control-row {
     height: 50px;
   }
-  .control-name { 
+  .control-name {
     width: 120px;
     display: inline-block;
   }
@@ -50,12 +49,13 @@
 </head>
 <body>
 
+  <button id="video-button" onclick="startStop()">Start Video</button>
   <button id="play-pause" onclick="playPause()">Play</button>
   <div class="demo-frame">
     <div class="demo-container">
       <!-- img id="video" src="training4.jpg" / -->
-      <video id="video" width="720" height="600" preload loop muted></video>
-      <canvas id="canvas" width="720" height="600"></canvas>
+      <video id="video" width="640" height="480" preload loop muted></video>
+      <canvas id="canvas" width="640" height="480"></canvas>
     </div>
     <pre id="code"></pre>
     <div class="controls">
@@ -93,7 +93,7 @@
         <input type="number" min="0" max="255" step="1" id="orange-g" value="100" onchange="calibrate()">
         <input type="number" min="0" max="255" step="1" id="orange-b" value="50" onchange="calibrate()">
         <input type="number" min="0" max="255" step="1" id="orange-s" value="40" onchange="calibrate()">
-    </div>    
+    </div>
   </div>
 
 <script src="js/tangible.js"></script>
