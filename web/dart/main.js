@@ -1,12 +1,8 @@
-const bpm = 90.0;
-const bps = bpm / 60.0;
-const secondsPerBeat = 1.0 / bps;
-const secondsPerMeasure = 4.0 * secondsPerBeat;
-var msPerMeasure = Math.round(secondsPerMeasure * 1000);
+var bpm = 90.0;
 
-function beatsToSeconds(beats) { return beats * secondsPerBeat; }
+function beatsToSeconds(beats) { return beats / (bpm / 60.0); }
 
-function secondsToBeats(s) { return s * bps; }
+function secondsToBeats(s) { return s * (bpm / 60.0); }
 
 function beatsToX(beats) { return ((beats % 4.0) / 4.0) * (w - 100) + 50; }
 
@@ -17,11 +13,14 @@ const h = 300;
 var start_time = 0;
 
 var colors = [ "blue", "purple", "orange", "green", "cyan" ];    
-var drums = [ "kick", "snare", "hat", "tom", "clap" ];
+var drums = [ "kick", "snare", "hat", "clap", "tom" ];
 
 var playing = false;
   
 var context = null;
+
+var analyzer = null;
+var dataArray = null;
   
 // sounds scheduled to be played
 var scheduled = [];
@@ -57,8 +56,8 @@ function Slot(row, col, color, drum, c) {
   var self = this;
 
   this.circle.onclick = function(e) { 
-    console.log('click'); 
-    self.toggleCircle(); 
+    self.toggleCircle();
+    updateMidiDevice(-1);
   }
   this.circle.ontouchstart = function(e) { 
     console.log('touch down');
@@ -82,6 +81,19 @@ function Slot(row, col, color, drum, c) {
     }
     this.on = !this.on;
     generateCode();
+  }
+
+
+  this.clear = function() {
+    if (!this.on) {
+      this.circle.setAttribute("fill", "#0002");
+      this.circle.setAttribute("r", this.r - 12);
+    }
+  }
+
+
+  this.pump = function() {
+    if (!this.on) this.circle.setAttribute("fill", "black");
   }
 }
 
@@ -112,17 +124,26 @@ function generateCode() {
 // start / stop playback
 //------------------------------------------------------------------------
 function playPause() {
-  if (playing) {
-    playing = false;
-    stopSounds();
-    document.getElementById("play-button").innerHTML = "Play";
-  }
-  else {
+  playing ? pause() : play();
+}
+
+
+function play() {
+  if (!playing) {
     start_time = context.currentTime;
     queueSequence();
     playing = true;
     document.getElementById("play-button").innerHTML = "Stop";
     tick(0);
+  }
+}
+
+
+function pause() {
+  if (playing) {
+    playing = false;
+    stopSounds();
+    document.getElementById("play-button").innerHTML = "Play";
   }
 }
 
@@ -163,7 +184,8 @@ function playSound(name, time) {
   var buffer = drumBuffers[name]; 
   var source = context.createBufferSource(); // creates a sound source
   source.buffer = buffer;                    // tell the source which sound to play
-  source.connect(context.destination);       // connect the source to the context's destination (the speakers)
+  source.connect(analyzer);
+  
   source.start(time);  
   scheduled.push(source);
 }
@@ -192,6 +214,8 @@ function loadDrumSound(name) {
 function tick(timestamp) {
   if (playing) {
     let now = context.currentTime;
+    let secondsPerMeasure = 4.0 / (bpm / 60.0);
+
     beats = secondsToBeats((now - start_time) % secondsPerMeasure);
     draw(beats);
     window.requestAnimationFrame(tick);
@@ -208,10 +232,108 @@ function tick(timestamp) {
 //------------------------------------------------------------------------
 // refresh the playhead
 //------------------------------------------------------------------------
+var _lastcol = -1;
 function draw(beats) {
   let x = beatsToX(beats);
   playhead.setAttribute("x1", x);
   playhead.setAttribute("x2", x);
+
+  let col = Math.round(beats * 4);
+  if (col != _lastcol) updateMidiDevice(col);
+  _lastcol = col;
+
+  analyzer.getByteFrequencyData(dataArray);
+/*
+  for (let slot of slots) {
+    slot.clear();
+    let v = Math.floor(5 * dataArray[slot.col] / 255);
+    if (v > (4 - slot.row)) {
+      slot.pump();
+    }
+  }
+*/
+}
+
+
+function midiEvent(data) {
+  //console.log(data);
+  let note = data['note'];
+
+  // RESONANCE KNOB
+  if (data['command'] == 11 && note == 19) {
+    // turning clockwize
+    if (data['velocity'] == 1) {
+      bpm ++;
+      if (bpm > 300) bpm = 300;
+    } else {
+      bpm --;
+      if (bpm < 30) bpm = 30;
+    }
+    console.log(bpm);
+  }
+  // note on
+  if (data['command'] == 9) {
+
+    // play button
+    if (note == 51) {
+      play();
+    }
+
+    // stop button
+    else if (note == 52) {
+      pause();
+    }
+
+    // beat pad
+    else {
+      note -= 54;
+      if (note >= 0) {
+        let row = Math.floor(note / 16);
+        let col = note % 16;
+        for (let slot of slots) {
+          if (slot.row == row && slot.col == col) {
+            slot.toggleCircle();
+            updateMidiDevice(-1);
+            break;
+          }
+        }
+      }
+    }
+  }
+}
+
+
+function updateMidiDevice(playhead) {
+  var pads = [];
+  var pcolors = {
+    "blue" : [ 0.0, 0.1, 0.5 ],
+    "purple" : [ 0.3, 0.0, 0.5 ],
+    "orange" : [ 0.5, 0.3, 0.0 ],
+    "green" : [ 0.0, 0.5, 0.0 ],
+    "cyan" : [ 0.0, 0.5, 0.3 ]
+  }
+
+  for (let i=0; i<64; i++) {
+    let col = i % 16;
+    if (col == playhead) {
+      pads.push( [ 0.1, 0.1, 0.1] );
+    } else {
+      pads.push( [ 0.025, 0.025, 0.025] );
+    }
+  }
+
+  for (let slot of slots) {
+    let index = slot.row * 16 + slot.col;
+    if (slot.on) {
+      pads[index] = pcolors[slot.color];
+      if (slot.col == playhead) {
+        pads[index] = [ 0.2, 0.2, 0.2 ];
+      }
+    }
+  }
+
+  lightFirePads(pads);
+  lightButton(0x33, 0x03);
 }
 
 
@@ -251,9 +373,17 @@ window.onload = function() {
   container.appendChild(playhead);
 
   context = new AudioContext();
-    
+  analyzer = context.createAnalyser();
+  analyzer.fftSize = 32;
+  var bufferLength = analyzer.frequencyBinCount;
+  dataArray = new Uint8Array(bufferLength);
+  analyzer.connect(context.destination);
+
   document.getElementById("play-button").onclick = playPause;
 
   document.addEventListener('contextmenu', event => event.preventDefault());
+
+  // init midi device
+  midiInit();
 }
 
