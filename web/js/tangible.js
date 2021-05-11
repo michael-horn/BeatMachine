@@ -465,8 +465,8 @@ window.onload = function() {
 
 
 function midiEvent(data) {
-  let c == data['command'];
-  let n == data['note'];
+  let c = data['command'];
+  let n = data['note'];
   if (c === 9 && n === 51) {
     playPause();
   }
