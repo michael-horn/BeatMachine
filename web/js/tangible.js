@@ -465,17 +465,24 @@ window.onload = function() {
 
 
 function midiEvent(data) {
-  if (data['command'] === 9 && data['note'] === 0) {
+  let c == data['command'];
+  let n == data['note'];
+  if (c === 9 && n === 51) {
     playPause();
   }
-  else if (data['command'] === 11 && data['note'] === 1) {
+  else if (c === 9 && n === 73) {
+    // fill
+  }
+  else if (c === 11 && n === 21) {
     setTempo(data['velocity'] * 2 + 30);
   }
-  else if (data['command'] === 11 && data['note'] === 0) {
+  else if (c === 11 && n === 68) {
     let s = data['velocity'] / 127;
     setSwing(s * 0.6 + 0.2);
   }
-  console.log(data);
+  else {
+    console.log(data);
+  }
 }
 
 
