@@ -17,6 +17,22 @@ var bpm = 90.0;   // beats per minute
 var swing = 0.5;  // swing percentage
 
 
+var DRUM_KIT = [
+  { name : "kick",  sound : "bd.mp3",   color : [ 50, 50, 255 ] },   // blue
+  { name : "hat",   sound : "ch.mp3",   color : [ 255, 150, 40 ] },  // orange
+  { name : "snare", sound : "sd.mp3",   color : [ 90, 255, 150 ] },  // green
+  { name : "clap",  sound : "clap.mp3", color : [ 255, 50, 200 ] },  // purple
+  { name : "red",   sound : "rs.mp3",   color : [ 255, 0, 0 ]}       // red
+];
+var EMPTY = { name : "empty", sound : null, color : [ 0, 0, 0 ] };
+
+  // maps ball color to drum sound
+/*
+  static drum_colors = {
+    "red" : "mt",
+  };
+*/
+
 var context = new AudioContext();
 var playing = false;   // is beat machine playing or paused
 var canvas;
@@ -26,6 +42,12 @@ var videoStream = null;
 var dragging = false;
 var slots = []; // all of the balls recognized by the camera in this frame
 var start_time = 0;
+var debug = false;
+
+
+function isCropped() {
+  return (crop[0] > 0 || crop[1] > 0 || crop[2] < 640 || crop[3] < 480);
+}
 
 
 //------------------------------------------------------------------------
@@ -105,6 +127,11 @@ function setTempo(newBPM) {
   }
 }
 
+function tempoUp() { setTempo(bpm + 1); }
+function tempoDown() { setTempo(bpm - 1); }
+
+
+
 
 //------------------------------------------------------------------------
 // change swing
@@ -127,8 +154,9 @@ function swingUp() { setSwing(swing + 0.01); }
 function swingDown() { setSwing(swing - 0.01); }
 
 
-function tempoUp() {
-  setTempo(bpm + 5);
+function toggleDebug() {
+  debug = !debug;
+  draw();
 }
 
 
@@ -213,11 +241,41 @@ function colorString(color) {
   return `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
 }
 
+//------------------------------------------------------------------------
+// calibrate colors
+//------------------------------------------------------------------------
+function calibrateColors() {
+  if (isRunning() && debug) {
+    console.log('calibrating');
+    for (let drum of DRUM_KIT) {
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let count = 0;
+      for (let i=0; i<COLS; i++) {
+        for (let j=0; j<ROWS; j++) {
+          let slot = slots[i][j];
+          if (slot.calibrate != null && slot.calibrate.name == drum.name) {
+            r += slot.scan[0];
+            g += slot.scan[1];
+            b += slot.scan[2];
+            count++;
+          }
+        }
+      }
+      if (count > 0) {
+        drum.color = [ r/count, g/count, b/count ];
+        console.log(drum);
+      }
+    }
+  }
+}
 
 //------------------------------------------------------------------------
 // repaint the canvas
 //------------------------------------------------------------------------
 function draw(beats) {
+
   if (canvas && ctx) {
     let w = canvas.width;
     let h = canvas.height;
@@ -227,95 +285,102 @@ function draw(beats) {
     let ch = Math.max(crop[3], 1);
     let bw = cw / COLS;
     let bh = ch / ROWS;
+    let m = bw * 0.4;
+    let idata = null;
 
     ctx.save();
-    ctx.clearRect(0, 0, w, h);
+    {
+      ctx.clearRect(0, 0, w, h);
 
-    if (dragging) {
-      ctx.drawImage(video, 0, 0, w, h);
-      ctx.strokeStyle = 'red';
-      ctx.strokeWidth = 2;
-      ctx.beginPath();
-      for (let i=0; i<=COLS; i++) {
-        ctx.moveTo(cx + i * bw, cy);
-        ctx.lineTo(cx + i * bw, cy + ch);
+      if (dragging) {
+        ctx.drawImage(video, 0, 0, w, h);
+      } else {
+        ctx.drawImage(video, cx, cy, cw, ch, 0, 0, w, h);
+        cx = 0;
+        cy = 0;
+        cw = w;
+        ch = h;
       }
-      for (let j=0; j<=ROWS; j++) {
-        ctx.moveTo(cx, cy + j * bh);
-        ctx.lineTo(cx + cw, cy + j * bh);
+
+      idata = ctx.getImageData(cx, cy, cw, ch);
+      if (dragging || debug) drawGrid(cx, cy, cw, ch);
+
+      // draw beat regions
+      if (isCropped()) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fillRect(cx, cy, bw * 4, ch);
+        ctx.fillRect(cx + bw * 8, cy, bw * 4, ch);
       }
-      ctx.stroke();
-      return;
-    }
 
-    ctx.drawImage(video, cx, cy, cw, ch, 0, 0, w, h);
-    let idata = ctx.getImageData(cx, cy, cw, ch);
-    let m = bw / 6.0;
+      for (let i=0; i<COLS; i++) {
+        for (let j=0; j<ROWS; j++) {
+          let bx = i * bw;
+          let by = j * bh;
+          let scan = scanRect(idata, bx + m, by + m, bw - m * 2, bh - m * 2, cw);
+          let delta = colorDistance(EMPTY.color, scan);
+          let drum = EMPTY;
 
-    let blue = [ 0, 0, 255 ];
-    let red = [ 255, 0, 0 ];
-    let green = [ 0, 255, 0 ];
-    let pink = [ 255, 100, 50 ];
-    let orange = [ 255, 200, 0 ];
+          for (let d of DRUM_KIT) {
+            let dist = colorDistance(d.color, scan);
+            if (dist < delta) {
+              drum = d;
+              delta = dist;
+            }
+          }
 
-    for (let i=0; i<COLS; i++) {
-      for (let j=0; j<ROWS; j++) {
-        let bx = i * bw;
-        let by = j * bh;
-        let scan = scanRect(idata, bx + m, by + m, bw - m * 2, bh - m * 2, cw);
+          slots[i][j].setDrum(drum);
+          slots[i][j].scan = scan;
 
-        let dist = colorDistance([20, 20, 20], scan);
-        let dR = colorDistance(red, scan);
-        let dG = colorDistance(green, scan);
-        let dB = colorDistance(blue, scan);
-        let dO = colorDistance(orange, scan);
-        let color = 'rgba(0,0,0,0)';
-        if (dR < dist) {
-          color = colorString(red);
-          dist = dR;
+
+          if (dragging) {
+            if (bw - m * 2 > 2) {
+              //ctx.fillStyle = colorString(scan);
+              ctx.fillStyle = colorString(drum.color);
+              ctx.beginPath();
+              ctx.arc(cx + bx + bw/2, cy + by + bh/2, bw - m * 2, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          } else if (isCropped()) {
+            slots[i][j].draw(bx, by, bw, bh, debug);
+          }
         }
-        if (dG < dist) {
-          color = colorString(green);
-          dist = dG;
-        }
-        if (dB < dist) {
-          color = colorString(blue);
-          dist = dB;
-        }
-        if (dO < dist) {
-          color = 'orange';
-          dist = dO;
-        }
-        //ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
-        ctx.fillStyle = color;
+      }
+
+      if (playing) {
+        let bx = getCurrentBeat() * w / 4.0;
         ctx.beginPath();
-        ctx.arc(cx + bx + bw/2, cy + by + bh/2, m, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.moveTo(bx, 0);
+        ctx.lineTo(bx, h);
+        ctx.strokeStyle = "gold";
+        ctx.lineWidth = 5;
+        ctx.stroke();
       }
     }
-/*
-    ctx.beginPath();
-    ctx.moveTo(beatsToX(beats), cropTop);
-    ctx.lineTo(beatsToX(beats), canvas.height - cropBottom);
-    ctx.strokeStyle = "gold";
-    ctx.lineWidth = 5;
-    ctx.stroke();
-    */
     ctx.restore();
   }
 }
 
 
-
-function isRunning() {
-  return videoStream != null;
+function drawGrid(cx, cy, cw, ch) {
+  let bw = cw / COLS;
+  let bh = ch / ROWS;
+  ctx.strokeStyle = 'red';
+  ctx.strokeWidth = 2;
+  ctx.beginPath();
+  for (let i=0; i<=COLS; i++) {
+    ctx.moveTo(cx + i * bw, cy);
+    ctx.lineTo(cx + i * bw, cy + ch);
+  }
+  for (let j=0; j<=ROWS; j++) {
+    ctx.moveTo(cx, cy + j * bh);
+    ctx.lineTo(cx + cw, cy + j * bh);
+  }
+  ctx.stroke();
 }
 
 
-function beatsToX(beats) {
-  let cw = crop[3];
-  let beatWidth = cw / 4.0;
-  return crop[0] + beatWidth * beats + beatWidth * 0.125;
+function isRunning() {
+  return videoStream != null;
 }
 
 
@@ -334,7 +399,7 @@ function xToBeats(x) {
 // while playing redraw the screen and schedule each new measure
 //------------------------------------------------------------------------
 function tick(timestamp) {
-  if (isRunning()) {
+  if (isRunning() || playing) {
     draw(0);
   }
   if (playing) {
@@ -369,32 +434,22 @@ window.onload = function() {
   ctx = canvas.getContext('2d');
 
   // pre-load the drum samples
-  Slot.loadDrumSound("bd.mp3");
-  Slot.loadDrumSound("sd.mp3");
-  Slot.loadDrumSound("mt.mp3");
-  Slot.loadDrumSound("ch.mp3");
-  Slot.loadDrumSound("clap.mp3");
+  for (let drum of DRUM_KIT) {
+    if (drum.sound != null) Slot.loadDrumSound(drum.sound);
+  }
 
 
   // create the slots
   for (let i = 0; i < COLS; i++) {
     slots.push([ ]);
     for (let j = 0; j < ROWS; j++) {
-      slots[i].push(new Slot(j, i));
+      let slot = new Slot(j, i);
+      slots[i].push(slot);
+      if (i % ROWS == j) {
+        slot.calibrate = DRUM_KIT[ i % DRUM_KIT.length ];
+      }
     }
   }
-  slots[0][0].color = 'blue';
-  slots[4][0].color = 'blue';
-  slots[8][0].color = 'blue';
-  slots[12][0].color = 'blue';
-  slots[2][0].color = 'green';
-  slots[6][0].color = 'green';
-  slots[10][0].color = 'green';
-  slots[14][0].color = 'green';
-  slots[1][0].color = 'orange';
-  slots[5][0].color = 'orange';
-  slots[9][0].color = 'orange';
-  slots[13][0].color = 'orange';
 
   midiInit();
   let downX = -1, downY = -1;
@@ -444,12 +499,10 @@ window.onload = function() {
       case 40: crop[1] += 1; break;
       case 39: crop[0] += 1; break;
       case 37: crop[0] -= 1; break;
+      case 67: calibrateColors(); break // 'c'
       case 81: resetCrop(); break;  // 'q'
-      case 187: // zoom in
-        break;
-      case 189:  // zoom out
-        break;
-
+      case 187: tempoUp(); break;  // '+'
+      case 189: tempoDown(); break;  // '-'
       case 188: swingDown(); break; // '<'
       case 190: swingUp(); break; // '>'
       case 70:  // 'f'
@@ -480,7 +533,7 @@ function midiEvent(data) {
     let s = data['velocity'] / 127;
     setSwing(s * 0.6 + 0.2);
   }
-  else {
+  else if (c != 8) {
     console.log(data);
   }
 }
@@ -490,30 +543,49 @@ class Slot {
 
   static drumBuffers = { };
 
-  // maps ball color to drum sound
-  static colors = {
-    "blue" : "bd",
-    "green" : "sd",
-    "orange" : "ch",
-    "red" : "mt",
-    "pink" : "clap"
-  };
-
 
   constructor(row, col) {
     this.row = row;
     this.col = col;
-    this.color = null;
+    this.drum = EMPTY;
     this._gain = null;
     this._source = null;
+    this.calibrate = null;
+    this.scan = [ 0, 0, 0 ];
+  }
+
+  isEmpty() {
+    return (this.drum == null || this.drum.name == "empty");
   }
 
 
-  setColor(color) {
-    if (color != this.color) {
-      this.color = color;
-      cancelSound();
-      playing ? scheduleSound(0) : previewSound();
+  draw(bx, by, bw, bh, debug) {
+    if (!debug && this.isEmpty()) return;
+
+    let cb = getCurrentBeat();
+    let mb = this.col * 0.25;
+    let highlight = (playing && cb >= mb && cb <= mb + 0.25);
+    ctx.save();
+    {
+      let m = bw * 0.3;
+      ctx.fillStyle = highlight ? 'white' : colorString(this.drum.color);
+      ctx.beginPath();
+      ctx.arc(bx + bw/2, by + bh/2, bw - m * 2, 0, Math.PI * 2);
+      ctx.fill();
+      if (debug && this.calibrate != null) {
+        ctx.strokeStyle = colorString(this.calibrate.color);
+        ctx.lineWidth = 5;
+        ctx.strokeRect(bx, by, bw, bh);
+      }
+    }
+    ctx.restore();
+  }
+
+  setDrum(drum) {
+    if (drum.name != this.drum.name) {
+      this.drum = drum;
+      this.cancelSound();
+      if (playing) this.scheduleSound(0);
     }
   }
 
@@ -529,7 +601,11 @@ class Slot {
 
 
   getAudioBuffer() {
-    return (this.color == null) ? null : Slot.drumBuffers[Slot.colors[this.color] + '.mp3'];
+    if (this.drum == null) {
+      return null;
+    } else {
+      return Slot.drumBuffers[this.drum.sound];
+    }
   }
 
 
@@ -556,7 +632,7 @@ class Slot {
 
 
   playSound(when) {
-    if (this.color == null) return;
+    if (this.drum == null || this.drum.name === "empty") return;
     let dest = context.destination;
 
     let buffer = this.getAudioBuffer();
