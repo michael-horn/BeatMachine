@@ -3,100 +3,158 @@
 <head>
   <meta charset="utf-8">
   <title>Drum Machine</title>
-
+  <link rel="stylesheet" href="css/fontawesome.all.min.css">
   <style>
 
-  .demo-frame {
-    display: flex;
-    position: relative;
-  }
-  .demo-container {
-    position: relative;
-    width: 720px;
-    height: 600px;
-    margin: 20px;
-    border: 1px solid #ccc;
-  }
+body {
+  background-color: #606060;
+  padding: 10px 30px;
+  color: white;
+  font-family: 'Helvetica Neue';
+  font-size: 20px;
+}
 
-  #canvas, #video {
-    top: 0;
-    left: 0;
-    position: absolute;
-    /*transform: scale(-1, -1);*/
-  }
+header {
+  border-top: 2px solid white;
+  border-bottom: 2px solid white;
+  display: flex;
+  width: 100%;
+  padding: 5px 0;
+}
 
-  #video {
-  }
-  #code {
-    position: absolute;
-    top: 15px;
-    left: 50px;
-    height: 300px;
-    font-family: monospace;
-    color: rgba(255, 255, 255, 0.8);
-    box-sizing: border-box;
-    font-size: 18px;
-    line-height: 180%;
-  }
-  .control-row {
-    height: 50px;
-  }
-  .control-name {
-    width: 120px;
-    display: inline-block;
-  }
+
+footer {
+  border-top: 2px solid white;
+  display: flex;
+  width: calc(100vw - 60px);
+  padding-top: 5px;
+  position: fixed;
+  bottom: 10px;
+}
+
+.project-title {
+  font-size: 30px;
+  border-bottom: 7px solid white;
+  position: relative;
+  top: 14px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 175%;
+  display: flex;
+}
+
+.ball {
+  width: 25px;
+  height: 25px;
+  background-color: red;
+  border-radius: 50%;
+  margin: 5px 0 0 -7px;
+  position: relative;
+  top: 5px;
+}
+
+.ball.blue { background-color: #34fa; }
+.ball.green { background-color: #5f7a; }
+.ball.orange { background-color: #fa0a; }
+.ball.purple { background-color: #f7fa; }
+
+.tempo-container, .swing-container {
+  font-size: 18px;
+  margin-right: 80px;
+}
+
+#tempo, #swing {
+  font-size: 40px;
+}
+
+#drumkit {
+  font-size: 50px;
+  font-weight: 800;
+}
+
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  right: 0;
+  top: 200px;
+  border-top-left-radius: 5px;
+  border-bottom-left-radius: 5px;
+  padding: 5px;
+  background-color: #0008;
+}
+
+.toolbar button {
+  width: 40px;
+  height: 50px;
+  border: none;
+  outline: none;
+  background-color: transparent;
+  color: white;
+  font-size: 90%;
+}
+
+.toolbar button.hidden { display: none; }
+.toolbar button:hover { color: #fff8; }
+.toolbar button:active { color: white; }
+
+.video-container {
+  margin: 15px auto;
+  position: relative;
+  text-align: center;
+}
+
+#canvas {
+  background-color: transparent;
+}
+#canvas.cropped {
+  margin-top: 70px;
+  width: calc(100vw - 150px);
+}
+
+#video {
+  display: none;
+}
+
   </style>
 </head>
 <body>
 
-  <button id="video-button" onclick="startStop()">Start Video</button>
-  <button id="play-pause" onclick="playPause()">Play</button>
-  <div class="demo-frame">
-    <div class="demo-container">
-      <!-- img id="video" src="training4.jpg" / -->
-      <video id="video" width="640" height="480" preload loop muted></video>
-      <canvas id="canvas" width="640" height="480"></canvas>
+  <header>
+    <div id="drumkit">Roland 808</div>
+    <div style="flex: 1"></div>
+    <div class="project-title">
+      <div class="ball red"></div>
+      <div class="ball blue"></div>
+      <div class="ball green"></div>
+      <div class="ball orange"></div>
+      <div class="ball purple"></div>
     </div>
-    <pre id="code"></pre>
-    <div class="controls">
-    <div class="control-row">
-        <span class="control-name">Blue (RGBS):</span>
-        <input type="number" min="0" max="255" step="1" id="blue-r" value="30" onchange="calibrate()">
-        <input type="number" min="0" max="255" step="1" id="blue-g" value="50" onchange="calibrate()">
-        <input type="number" min="0" max="255" step="1" id="blue-b" value="150" onchange="calibrate()">
-        <input type="number" min="0" max="255" step="1" id="blue-s" value="40" onchange="calibrate()">
-    </div>
-    <div class="control-row">
-        <span class="control-name">Green (RGBS):</span>
-        <input type="number" min="0" max="255" step="1" id="green-r" value="100" onchange="calibrate()">
-        <input type="number" min="0" max="255" step="1" id="green-g" value="170" onchange="calibrate()">
-        <input type="number" min="0" max="255" step="1" id="green-b" value="80" onchange="calibrate()">
-        <input type="number" min="0" max="255" step="1" id="green-s" value="40" onchange="calibrate()">
-    </div>
-    <div class="control-row">
-        <span class="control-name">Cyan (RGBS):</span>
-        <input type="number" min="0" max="255" step="1" id="cyan-r" value="85" onchange="calibrate()">
-        <input type="number" min="0" max="255" step="1" id="cyan-g" value="200" onchange="calibrate()">
-        <input type="number" min="0" max="255" step="1" id="cyan-b" value="200" onchange="calibrate()">
-        <input type="number" min="0" max="255" step="1" id="cyan-s" value="40" onchange="calibrate()">
-    </div>
-    <div class="control-row">
-        <span class="control-name">Purple (RGBS):</span>
-        <input type="number" min="0" max="255" step="1" id="purple-r" value="180" onchange="calibrate()">
-        <input type="number" min="0" max="255" step="1" id="purple-g" value="80" onchange="calibrate()">
-        <input type="number" min="0" max="255" step="1" id="purple-b" value="180" onchange="calibrate()">
-        <input type="number" min="0" max="255" step="1" id="purple-s" value="40" onchange="calibrate()">
-    </div>
-    <div class="control-row">
-        <span class="control-name">Orange (RGBS):</span>
-        <input type="number" min="0" max="255" step="1" id="orange-r" value="210" onchange="calibrate()">
-        <input type="number" min="0" max="255" step="1" id="orange-g" value="100" onchange="calibrate()">
-        <input type="number" min="0" max="255" step="1" id="orange-b" value="50" onchange="calibrate()">
-        <input type="number" min="0" max="255" step="1" id="orange-s" value="40" onchange="calibrate()">
-    </div>
+  </header>
+
+  <nav class="toolbar">
+    <button id="start-video-button" onclick="startVideo()"><i class="fas fa-video"></i></button>
+    <button id="stop-video-button" class="hidden" onclick="stopVideo()"><i class="fas fa-video-slash"></i></button>
+    <button id="play-button" onclick="play()"><i class="fas fa-play"></i></button>
+    <button id="pause-button" onclick="pause()" class="hidden"><i class="fas fa-pause"></i></button>
+    <button id="clear-button" onclick="resetCrop()"><i class="fas fa-undo-alt"></i></button>
+    <button id="voice-button"><i class="fas fa-drum"></i></button>
+  </nav>
+
+  <div class="video-container">
+    <!--img id="video" src="training.jpg" -->
+    <video id="video" width="640" height="480" preload loop muted></video>
+    <canvas id="canvas" width="640" height="480"></canvas>
   </div>
 
+  <footer>
+    <div class="tempo-container"><span id="tempo">90</span> bpm</div>
+    <div class="swing-container"><span id="swing">50%</span> swing</div>
+    <div style="flex: 1"></div>
+    <img src="images/logo_light.svg" style="width: 50px;">
+  </footer>
+
 <script src="js/tangible.js"></script>
+<script src="js/midi-helper.js"></script>
 
 </body>
 </html>
