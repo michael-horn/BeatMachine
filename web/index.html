@@ -108,7 +108,7 @@ footer {
 }
 #canvas.cropped {
   margin-top: 70px;
-  width: calc(100vw - 150px);
+  width: calc(100vw - 300px);
 }
 
 #video {
@@ -139,6 +139,7 @@ footer {
     <button id="clear-button" onclick="resetCrop()"><i class="fas fa-undo-alt"></i></button>
     <button id="voice-button"><i class="fas fa-drum"></i></button>
     <button id="debug-button" onclick="toggleDebug()"><i class="fas fa-th"></i></button>
+    <button id="calibrate-button" class="hidden" onclick="calibrateColors()"><i class="fas fa-eye-dropper"></i></button>
   </nav>
 
   <div class="video-container">
@@ -151,7 +152,11 @@ footer {
     <div class="tempo-container"><span id="tempo">90</span> bpm</div>
     <div class="swing-container"><span id="swing">50%</span> swing</div>
     <div style="flex: 1"></div>
-    <div style="margin-right: 20px; line-height: 50px;">tunepad.com</div>
+    <div style="margin-right: 40px; line-height: 50px;">
+      @tunepad_live
+      <i class="fab fa-tiktok" style="font-size: 130%; margin-left: 20px;"></i>
+      <i class="fab fa-instagram" style="font-size: 130%; margin-left: 10px;"></i>
+    </div>
     <img src="images/logo_light.svg" style="width: 50px; height: 50px;">
   </footer>
 
