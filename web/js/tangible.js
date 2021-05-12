@@ -18,13 +18,18 @@ var swing = 0.5;  // swing percentage
 
 
 var DRUM_KIT = [
-  { name : "kick",  sound : "bd.mp3",   color : [ 50, 50, 255 ] },   // blue
-  { name : "hat",   sound : "ch.mp3",   color : [ 255, 150, 40 ] },  // orange
-  { name : "snare", sound : "sd.mp3",   color : [ 90, 255, 150 ] },  // green
-  { name : "clap",  sound : "clap.mp3", color : [ 255, 50, 200 ] },  // purple
-  { name : "red",   sound : "rs.mp3",   color : [ 255, 0, 0 ]}       // red
+  // blue
+  { name : "kick",  sounds : [ "bd.mp3", "bd.mp3", "lt.mp3", "mt.mp3", "ht.mp3" ], color : [ 50, 50, 255 ] },
+  // orange
+  { name : "hat",   sounds : [ "ch.mp3", "oh.mp3", "cy.mp3", "ch.mp3", "ch.mp3" ], color : [ 255, 150, 40 ] },
+  // green
+  { name : "snare", sounds : [ "sd.mp3", "sd.mp3", "sd.mp3", "sd.mp3", "sd.mp3" ], color : [ 90, 255, 150 ] },
+  // purple
+  { name : "clap",  sounds : [ "cp.mp3", "cp.mp3", "cp.mp3", "cp.mp3", "cp.mp3" ], color : [ 255, 50, 200 ] },
+  // red
+  { name : "red",   sounds : [ "rs.mp3", "cb.mp3", "cy.mp3", "rs.mp3", "cb.mp3" ], color : [ 255, 0, 0 ]}
 ];
-var EMPTY = { name : "empty", sound : null, color : [ 0, 0, 0 ] };
+var EMPTY = { name : "empty", sounds : [ ], color : [ 0, 0, 0 ] };
 
   // maps ball color to drum sound
 /*
@@ -435,7 +440,9 @@ window.onload = function() {
 
   // pre-load the drum samples
   for (let drum of DRUM_KIT) {
-    if (drum.sound != null) Slot.loadDrumSound(drum.sound);
+    for (let sound of drum.sounds) {
+      Slot.loadDrumSound(sound);
+    }
   }
 
 
@@ -549,7 +556,6 @@ class Slot {
     this.col = col;
     this.drum = EMPTY;
     this._gain = null;
-    this._source = null;
     this.calibrate = null;
     this.scan = [ 0, 0, 0 ];
   }
@@ -604,7 +610,8 @@ class Slot {
     if (this.drum == null) {
       return null;
     } else {
-      return Slot.drumBuffers[this.drum.sound];
+      let sound = this.drum.sounds[this.row];
+      return Slot.drumBuffers[sound];
     }
   }
 
@@ -622,16 +629,21 @@ class Slot {
     if (this.col % 2 == 1) swingBeat = 0.5 * swing;
     let startBeat = this.col * 0.25 + (swingBeat - 0.25);
     let currBeat = getCurrentBeat();
-    if (delayBeats > 0) {
-      this.playSound(this.beatsToSeconds(delayBeats + startBeat));
+    let repeatCount = 1;
+    if (this.drum.name == "hat" && this.drum.row == 0) {
+      repeatCount = 3;
+    } else if (this.drum.name == "hat" && this.drum.row == 1) {
+      repeatCount = 2;
     }
-    else if (currBeat < startBeat + 0.05) {
-      this.playSound(this.beatsToSeconds(startBeat - currBeat));
+    if (delayBeats > 0) {
+      this.playSound(this.beatsToSeconds(delayBeats + startBeat), repeatCount);
+    } else if (currBeat < startBeat + 0.05) {
+      this.playSound(this.beatsToSeconds(startBeat - currBeat), repeatCount);
     }
   }
 
 
-  playSound(when) {
+  playSound(when, repeatCount = 1) {
     if (this.drum == null || this.drum.name === "empty") return;
     let dest = context.destination;
 
@@ -642,10 +654,14 @@ class Slot {
     this._gain.gain.value = 0.9;
     this._gain.connect(dest);
 
-    this._source = context.createBufferSource();
-    this._source.buffer = buffer;
-    this._source.connect(this._gain);
-    this._source.start(when + context.currentTime);
+    let space = this.beatsToSeconds(0.25 / repeatCount);
+    if (repeatCount > 1) console.log(space);
+    for (let i=0; i<repeatCount; i++) {
+      let source = context.createBufferSource();
+      source.buffer = buffer;
+      source.connect(this._gain);
+      source.start(when + space * i + context.currentTime);
+    }
   }
 
 
