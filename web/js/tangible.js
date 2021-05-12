@@ -13,21 +13,21 @@ const ROWS = 5;
 const COLS = 16;
 var crop = [ 0, 0, 640, 480 ];
 
-var bpm = 90.0;   // beats per minute
-var swing = 0.5;  // swing percentage
+var bpm = 90.0, newBpm = 90.0;   // beats per minute
+var swing = 0.5, newSwing = 0.5;  // swing percentage
 
 
 var DRUM_KIT = [
   // blue
-  { name : "kick",  sounds : [ "bd.mp3", "bd.mp3", "lt.mp3", "mt.mp3", "ht.mp3" ], color : [ 50, 50, 255 ] },
+  { name : "kick",  sounds : [ "ht.mp3", "mt.mp3", "lt.mp3", "bd.mp3", "bd.mp3" ], color : [ 50, 50, 255 ] },
   // orange
-  { name : "hat",   sounds : [ "ch.mp3", "oh.mp3", "cy.mp3", "ch.mp3", "ch.mp3" ], color : [ 255, 150, 40 ] },
+  { name : "hat",   sounds : [ "ch.mp3", "ch.mp3", "oh.mp3", "ch.mp3", "ch.mp3" ], color : [ 255, 150, 40 ] },
   // green
   { name : "snare", sounds : [ "sd.mp3", "sd.mp3", "sd.mp3", "sd.mp3", "sd.mp3" ], color : [ 90, 255, 150 ] },
   // purple
   { name : "clap",  sounds : [ "cp.mp3", "cp.mp3", "cp.mp3", "cp.mp3", "cp.mp3" ], color : [ 255, 50, 200 ] },
   // red
-  { name : "red",   sounds : [ "rs.mp3", "cb.mp3", "cy.mp3", "rs.mp3", "cb.mp3" ], color : [ 255, 0, 0 ]}
+  { name : "red",   sounds : [ "cy.mp3", "cb.mp3", "rs.mp3", "cb.mp3", "rs.mp3" ], color : [ 255, 0, 0 ]}
 ];
 var EMPTY = { name : "empty", sounds : [ ], color : [ 0, 0, 0 ] };
 
@@ -114,22 +114,9 @@ function scheduleSounds(delayBeats) {
 //------------------------------------------------------------------------
 // change tempo
 //------------------------------------------------------------------------
-function setTempo(newBPM) {
-  newBPM = Math.min(Math.max(newBPM, 5), 300);
-  if (playing && context != null) {
-    let last_beats = (context.currentTime - start_time) * bpm / 60;
-    start_time = context.currentTime - last_beats * 60 / newBPM;
-  }
-  bpm = newBPM;
-  document.querySelector("#tempo").innerHTML = bpm;
-  if (playing) {
-    for (let i = 0; i < COLS; i++) {
-      for (let j = 0; j < ROWS; j++) {
-        slots[i][j].tempoChange();
-      }
-    }
-    requeued = false;
-  }
+function setTempo(t) {
+  newBpm = Math.min(Math.max(t, 5), 300);
+  document.querySelector("#tempo").innerHTML = newBpm;
 }
 
 function tempoUp() { setTempo(bpm + 1); }
@@ -141,18 +128,9 @@ function tempoDown() { setTempo(bpm - 1); }
 //------------------------------------------------------------------------
 // change swing
 //------------------------------------------------------------------------
-function setSwing(newSwing) {
-  newSwing = Math.min(Math.max(newSwing, 0.15), 0.85);
-  swing = newSwing;
-  document.querySelector("#swing").innerHTML = Math.round(swing * 100) + "%";
-  if (playing) {
-    for (let i = 0; i < COLS; i++) {
-      for (let j = 0; j < ROWS; j++) {
-        slots[i][j].tempoChange();
-      }
-    }
-    requeued = false;
-  }
+function setSwing(s) {
+  newSwing = Math.min(Math.max(s, 0.3), 0.7);
+  document.querySelector("#swing").innerHTML = Math.round(newSwing * 100) + "%";
 }
 
 function swingUp() { setSwing(swing + 0.01); }
@@ -161,6 +139,11 @@ function swingDown() { setSwing(swing - 0.01); }
 
 function toggleDebug() {
   debug = !debug;
+  if (debug) {
+    document.querySelector('#calibrate-button').classList.remove('hidden');
+  } else {
+    document.querySelector('#calibrate-button').classList.add('hidden');
+  }
   draw();
 }
 
@@ -404,6 +387,33 @@ function xToBeats(x) {
 // while playing redraw the screen and schedule each new measure
 //------------------------------------------------------------------------
 function tick(timestamp) {
+
+  let update = false;
+  // process tempo change
+  if (bpm != newBpm) {
+    if (playing && context != null) {
+      let last_beats = (context.currentTime - start_time) * bpm / 60;
+      start_time = context.currentTime - last_beats * 60 / newBpm;
+    }
+    bpm = newBpm;
+    update = true;
+  }
+
+  if (swing != newSwing) {
+    swing = newSwing;
+    update = true;
+  }
+
+  if (playing && update) {
+    for (let i = 0; i < COLS; i++) {
+      for (let j = 0; j < ROWS; j++) {
+        slots[i][j].tempoChange();
+      }
+    }
+    requeued = false;
+  }
+
+
   if (isRunning() || playing) {
     draw(0);
   }
@@ -430,6 +440,22 @@ function resetCrop() {
   canvas.height = 480;
   document.querySelector('#canvas').classList.remove('cropped');
   draw();
+  saveState();
+}
+
+
+function saveState() {
+  localStorage.setItem('crop', JSON.stringify(crop));
+}
+
+
+function loadState() {
+  if (localStorage.getItem('crop') != null) {
+    crop = JSON.parse(localStorage.getItem('crop'));
+    canvas.width = crop[2];
+    canvas.height = crop[3];
+    document.querySelector('#canvas').classList.add('cropped');
+  }
 }
 
 
@@ -437,6 +463,8 @@ window.onload = function() {
   video = document.querySelector("#video");
   canvas = document.querySelector('#canvas');
   ctx = canvas.getContext('2d');
+
+  loadState();
 
   // pre-load the drum samples
   for (let drum of DRUM_KIT) {
@@ -463,7 +491,7 @@ window.onload = function() {
   canvas.onmousedown = function(e) {
     downX = e.offsetX;
     downY = e.offsetY;
-    if (e.shiftKey) {
+//    if (e.shiftKey) {
       dragging = true;
       document.querySelector('#canvas').classList.remove('cropped');
       canvas.width = 640;
@@ -472,7 +500,7 @@ window.onload = function() {
       crop[1] = downY;
       crop[2] = 0;
       crop[3] = 0;
-    }
+//    }
   }
   canvas.onmousemove = function(e) {
     if (dragging) {
@@ -485,6 +513,7 @@ window.onload = function() {
       document.querySelector('#canvas').classList.add('cropped');
       canvas.width = crop[2];
       canvas.height = crop[3];
+      saveState();
     } else {
       console.log('clicked on canvas');
     }
@@ -502,10 +531,10 @@ window.onload = function() {
   document.onkeydown = function(k) {
     //console.log(k.keyCode);
     switch(k.keyCode) {
-      case 38: crop[1] -= 1; break;
-      case 40: crop[1] += 1; break;
-      case 39: crop[0] += 1; break;
-      case 37: crop[0] -= 1; break;
+      case 38: crop[1] -= 1; saveState(); break;
+      case 40: crop[1] += 1; saveState(); break;
+      case 39: crop[0] += 1; saveState(); break;
+      case 37: crop[0] -= 1; saveState(); break;
       case 67: calibrateColors(); break // 'c'
       case 81: resetCrop(); break;  // 'q'
       case 187: tempoUp(); break;  // '+'
@@ -573,7 +602,7 @@ class Slot {
     let highlight = (playing && cb >= mb && cb <= mb + 0.25);
     ctx.save();
     {
-      let m = bw * 0.3;
+      let m = this.isEmpty() ? bw * 0.45 : bw * 0.3;
       ctx.fillStyle = highlight ? 'white' : colorString(this.drum.color);
       ctx.beginPath();
       ctx.arc(bx + bw/2, by + bh/2, bw - m * 2, 0, Math.PI * 2);
@@ -630,14 +659,14 @@ class Slot {
     let startBeat = this.col * 0.25 + (swingBeat - 0.25);
     let currBeat = getCurrentBeat();
     let repeatCount = 1;
-    if (this.drum.name == "hat" && this.drum.row == 0) {
+    if (this.drum.name == "hat" && this.row == 0) {
       repeatCount = 3;
-    } else if (this.drum.name == "hat" && this.drum.row == 1) {
+    } else if (this.drum.name == "hat" && this.row == 1) {
       repeatCount = 2;
     }
     if (delayBeats > 0) {
       this.playSound(this.beatsToSeconds(delayBeats + startBeat), repeatCount);
-    } else if (currBeat < startBeat + 0.05) {
+    } else if ((currBeat < startBeat) || (this.col == 0 && currBeat < 0.05)) {
       this.playSound(this.beatsToSeconds(startBeat - currBeat), repeatCount);
     }
   }
@@ -655,7 +684,6 @@ class Slot {
     this._gain.connect(dest);
 
     let space = this.beatsToSeconds(0.25 / repeatCount);
-    if (repeatCount > 1) console.log(space);
     for (let i=0; i<repeatCount; i++) {
       let source = context.createBufferSource();
       source.buffer = buffer;
