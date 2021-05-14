@@ -14,29 +14,67 @@ const COLS = 16;
 var crop = [ 0, 0, 640, 480 ];
 
 var bpm = 90.0, newBpm = 90.0;   // beats per minute
-var swing = 0.5, newSwing = 0.5;  // swing percentage
+var swing = 0, newSwing = 0;  // swing percentage
 
 
 var DRUM_KIT = [
   // blue
-  { name : "kick",  sounds : [ "ht.mp3", "mt.mp3", "lt.mp3", "bd.mp3", "bd.mp3" ], color : [ 50, 50, 255 ] },
-  // orange
-  { name : "hat",   sounds : [ "ch.mp3", "ch.mp3", "oh.mp3", "ch.mp3", "ch.mp3" ], color : [ 255, 150, 40 ] },
-  // green
-  { name : "snare", sounds : [ "sd.mp3", "sd.mp3", "sd.mp3", "sd.mp3", "sd.mp3" ], color : [ 90, 255, 150 ] },
-  // purple
-  { name : "clap",  sounds : [ "cp.mp3", "cp.mp3", "cp.mp3", "cp.mp3", "cp.mp3" ], color : [ 255, 50, 200 ] },
-  // red
-  { name : "red",   sounds : [ "cy.mp3", "cb.mp3", "rs.mp3", "cb.mp3", "rs.mp3" ], color : [ 255, 0, 0 ]}
-];
-var EMPTY = { name : "empty", sounds : [ ], color : [ 0, 0, 0 ] };
+  {
+    name : "kick",
+    vars : [ "high_tom", "mid_tom", "low_tom", "kick", "kick" ],
+    sounds : [ "ht.mp3", "mt.mp3", "lt.mp3", "bd.mp3", "bd.mp3" ],
+    color : [ 50, 50, 255 ]
+  },
 
-  // maps ball color to drum sound
-/*
-  static drum_colors = {
-    "red" : "mt",
-  };
-*/
+  // orange
+  {
+    name : "hat",
+    vars : [ "hat", "hat", "open_hat", "hat", "hat" ],
+    sounds : [ "ch.mp3", "ch.mp3", "oh.mp3", "ch.mp3", "ch.mp3" ],
+    color : [ 255, 150, 40 ]
+  },
+
+  // green
+  {
+    name : "snare",
+    vars : [ "snare", "snare", "snare", "snare", "snare" ],
+    sounds : [ "sd.mp3", "sd.mp3", "sd.mp3", "sd.mp3", "sd.mp3" ],
+    color : [ 90, 255, 150 ]
+  },
+
+  // purple
+  {
+    name : "clap",
+    vars : [ "clap", "clap", "clap", "clap", "clap" ],
+    sounds : [ "cp.mp3", "cp.mp3", "cp.mp3", "cp.mp3", "cp.mp3" ],
+    color : [ 255, 50, 200 ]
+  },
+
+  // red
+  {
+    name : "red",
+    vars : [ "cymbal", "cowbell", "rimshot", "cowbell", "rimshot" ],
+    sounds : [ "cy.mp3", "cb.mp3", "rs.mp3", "cb.mp3", "rs.mp3" ],
+    color : [ 255, 0, 0 ]
+  }
+];
+var EMPTY = { name : "empty", vars : [ ], sounds : [ ], color : [ 0, 0, 0 ] };
+
+
+var VAR_VALUES = {
+  "kick" : 1,
+  "snare" : 2,
+  "hat" : 4,
+  "open_hat" : 5,
+  "high_tom" : 6,
+  "mid_tom" : 7,
+  "low_tom" : 8,
+  "cymbal" : 9,
+  "clap" : 10,
+  "rimshot" : 11,
+  "cowbell" : 3
+};
+
 
 var context = new AudioContext();
 var playing = false;   // is beat machine playing or paused
@@ -126,15 +164,15 @@ function tempoDown() { setTempo(bpm - 1); }
 
 
 //------------------------------------------------------------------------
-// change swing
+// change swing (s is value between 0 and 100)
 //------------------------------------------------------------------------
 function setSwing(s) {
-  newSwing = Math.min(Math.max(s, 0.3), 0.7);
-  document.querySelector("#swing").innerHTML = Math.round(newSwing * 100) + "%";
+  newSwing = Math.round(Math.min(Math.max(s, 0), 100));
+  document.querySelector("#swing").innerHTML = newSwing + "%";
 }
 
-function swingUp() { setSwing(swing + 0.01); }
-function swingDown() { setSwing(swing - 0.01); }
+function swingUp() { setSwing(newSwing + 1); }
+function swingDown() { setSwing(newSwing - 1); }
 
 
 function toggleDebug() {
@@ -459,6 +497,51 @@ function loadState() {
 }
 
 
+function generateCode() {
+  let vars = [];
+  let code = '';
+  for (let i=0; i<COLS; i++) {
+    let line = [];
+    for (let j=0; j<ROWS; j++) {
+      if (!slots[i][j].isEmpty()) {
+        let v = slots[i][j].drum.vars[j];
+        if (!line.includes(v)) line.push(v);
+        if (!vars.includes(v)) vars.push(v);
+      }
+    }
+    if (line.length == 0) {
+      code += 'rest(0.25)\n';
+    } else if (line.length == 1) {
+      code += 'playNote(' + line + ', beats = 0.25)\n';
+    }
+    else {
+      code += 'playNote([ ' + line + ' ], beats = 0.25)\n';
+    }
+  }
+  for (let v of vars) {
+    code = v + ' = ' + VAR_VALUES[v] + '\n' + code;
+  }
+  return code;
+}
+
+
+function toggleCode() {
+  document.querySelector('#code').innerHTML = generateCode();
+  document.querySelector('.code-container').classList.toggle('hidden');
+}
+
+
+function showCode() {
+  document.querySelector('#code').innerHTML = generateCode();
+  document.querySelector('.code-container').classList.remove('hidden');
+}
+
+
+function hideCode() {
+  document.querySelector('.code-container').classList.add('hidden');
+}
+
+
 window.onload = function() {
   video = document.querySelector("#video");
   canvas = document.querySelector('#canvas');
@@ -535,15 +618,13 @@ window.onload = function() {
       case 40: crop[1] += 1; saveState(); break;
       case 39: crop[0] += 1; saveState(); break;
       case 37: crop[0] -= 1; saveState(); break;
-      case 67: calibrateColors(); break // 'c'
+      case 67: toggleCode(); break // 'c'
       case 81: resetCrop(); break;  // 'q'
       case 187: tempoUp(); break;  // '+'
       case 189: tempoDown(); break;  // '-'
       case 188: swingDown(); break; // '<'
       case 190: swingUp(); break; // '>'
-      case 70:  // 'f'
-        console.log(crop); break;
-
+      case 70: console.log(crop); break;  // 'f'
       case 86: startStopVideo(); break;  // 'v'
       case 32: playPause(); break;  // <space>
       default:
@@ -560,14 +641,16 @@ function midiEvent(data) {
     playPause();
   }
   else if (c === 9 && n === 73) {
-    // fill
+    showCode();
+  }
+  else if (c === 8 && n === 73) {
+    hideCode();
   }
   else if (c === 11 && n === 21) {
-    setTempo(data['velocity'] * 2 + 30);
+    setTempo(data['velocity'] + 50);
   }
   else if (c === 11 && n === 68) {
-    let s = data['velocity'] / 127;
-    setSwing(s * 0.6 + 0.2);
+    setSwing(100.0 * data['velocity'] / 127);
   }
   else if (c != 8) {
     console.log(data);
@@ -655,7 +738,8 @@ class Slot {
 
   scheduleSound(delayBeats) {
     let swingBeat = 0.25;
-    if (this.col % 2 == 1) swingBeat = 0.5 * swing;
+    let swingVal = 0.5 + (swing / 100.0) * 0.3;
+    if (this.col % 2 == 1) swingBeat = 0.5 * swingVal;
     let startBeat = this.col * 0.25 + (swingBeat - 0.25);
     let currBeat = getCurrentBeat();
     let repeatCount = 1;
