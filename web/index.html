@@ -103,6 +103,32 @@ footer {
   text-align: center;
 }
 
+.code-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+}
+.code-container.hidden {
+  display: none;
+}
+
+.code-dialog {
+  margin: 50px 100px;
+  padding: 40px;
+  color: #333;
+  background-color: #eee;
+  font-size: 80%;
+  border-radius: 15px;
+  line-height: 150%;
+}
+
+#code {
+  font-family: monospace;
+}
+
 #canvas {
   background-color: transparent;
 }
@@ -148,9 +174,16 @@ footer {
     <canvas id="canvas" width="640" height="480"></canvas>
   </div>
 
+  <div class="code-container hidden">
+    <div class="code-dialog">
+      <h1 style="margin: 0; font-family: 'Helvetica'">TunePad Python Code</h1>
+      <pre id="code"></pre>
+    </div>
+  </div>
+
   <footer>
     <div class="tempo-container"><span id="tempo">90</span> bpm</div>
-    <div class="swing-container"><span id="swing">50%</span> swing</div>
+    <div class="swing-container"><span id="swing">0%</span> swing</div>
     <div style="flex: 1"></div>
     <div style="margin-right: 40px; line-height: 50px;">
       @tunepad_live
