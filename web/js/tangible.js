@@ -155,6 +155,7 @@ function scheduleSounds(delayBeats) {
 function setTempo(t) {
   newBpm = Math.min(Math.max(t, 5), 300);
   document.querySelector("#tempo").innerHTML = newBpm;
+  tick();
 }
 
 function tempoUp() { setTempo(bpm + 1); }
@@ -612,20 +613,36 @@ window.onload = function() {
 
 
   document.onkeydown = function(k) {
-    //console.log(k.keyCode);
     switch(k.keyCode) {
+
+      case 86: Slot.previewDrumSound('ch.mp3'); break; // YELLOW DRUM
+      case 88: Slot.previewDrumSound('rs.mp3'); break; // RED DRUM
+      case 73: Slot.previewDrumSound('cp.mp3'); break; // WHITE
+      case 53: Slot.previewDrumSound('sd.mp3'); break; // GREEN
+      case 90: Slot.previewDrumSound('bd.mp3'); break; // BLUE
+
+
       case 38: crop[1] -= 1; saveState(); break;
       case 40: crop[1] += 1; saveState(); break;
       case 39: crop[0] += 1; saveState(); break;
       case 37: crop[0] -= 1; saveState(); break;
       case 67: toggleCode(); break // 'c'
-      case 81: resetCrop(); break;  // 'q'
+      //case 81: resetCrop(); break;  // 'q'
+
+      case 75: tempoUp(); break;
       case 187: tempoUp(); break;  // '+'
+
+      case 81: tempoDown(); break;
       case 189: tempoDown(); break;  // '-'
+
+      case 83:
       case 188: swingDown(); break; // '<'
+
+      case 65:
       case 190: swingUp(); break; // '>'
-      case 70: console.log(crop); break;  // 'f'
-      case 86: startStopVideo(); break;  // 'v'
+
+      //case 70: console.log(crop); break;  // 'f'
+      //case 86: startStopVideo(); break;  // 'v'
       case 32: playPause(); break;  // <space>
       default:
         console.log(k.keyCode);
@@ -774,6 +791,20 @@ class Slot {
       source.connect(this._gain);
       source.start(when + space * i + context.currentTime);
     }
+  }
+
+
+  static previewDrumSound(sound) {
+    let dest = context.destination;
+    let buffer = Slot.drumBuffers[sound];
+    if (buffer == null) return;
+    let gain = context.createGain();
+    gain.gain.value = 0.9;
+    gain.connect(dest);
+    let source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(gain);
+    source.start(0);
   }
 
 
