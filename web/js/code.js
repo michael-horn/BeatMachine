@@ -1,9 +1,13 @@
 //----------------------------------------------------------------------
 // use to calibrate the current camera setup
 //----------------------------------------------------------------------
-const ROWS = 5;
+const ROWS = 6;
 const COLS = 16;
 
+var bpm = 90.0;   // beats per minute
+var swing = 10;  // swing percentage
+
+var DRUM_KIT = DRUMS_ROLAND;
 
 var VAR_VALUES = {
   "kick" : 1,
@@ -119,7 +123,9 @@ function draw(beats) {
     {
 
       // draw beat regions
+      ctx.clearRect(0, 0, w, h);
       ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      ctx.fillRect(0, 0, w, h);
       ctx.fillRect(0, 0, bw * 4, h);
       ctx.fillRect(bw * 8, 0, bw * 4, h);
 
@@ -127,8 +133,6 @@ function draw(beats) {
         for (let j=0; j<ROWS; j++) {
           let bx = i * bw;
           let by = j * bh;
-
-          slots[i][j].setDrum(drum);
           slots[i][j].draw(bx, by, bw, bh);
         }
       }
@@ -162,33 +166,6 @@ function xToBeats(x) {
 // while playing redraw the screen and schedule each new measure
 //------------------------------------------------------------------------
 function tick(timestamp) {
-
-  let update = false;
-  // process tempo change
-  if (bpm != newBpm) {
-    if (playing && context != null) {
-      let last_beats = (context.currentTime - start_time) * bpm / 60;
-      start_time = context.currentTime - last_beats * 60 / newBpm;
-    }
-    bpm = newBpm;
-    update = true;
-  }
-
-  if (swing != newSwing) {
-    swing = newSwing;
-    update = true;
-  }
-
-  if (playing && update) {
-    for (let i = 0; i < COLS; i++) {
-      for (let j = 0; j < ROWS; j++) {
-        slots[i][j].tempoChange();
-      }
-    }
-    requeued = false;
-  }
-
-
   if (playing) {
     draw(0);
     beats = getCurrentBeat();
@@ -234,6 +211,23 @@ function generateCode() {
 
 window.onload = function() {
 
+  DRUM_KIT = DRUMS_ROLAND;
+
+  //--------------------------------------------------------
+  // create the slots
+  //--------------------------------------------------------
+  for (let i = 0; i < COLS; i++) {
+    slots.push([ ]);
+    for (let j = 0; j < ROWS; j++) {
+      let slot = new Slot(j, i);
+      slots[i].push(slot);
+    }
+  }
+
+
+  //--------------------------------------------------------
+  // decode pattern query param
+  //--------------------------------------------------------
   const params = new URLSearchParams(location.search);
   let pattern = params.get('pattern');
   let output = document.querySelector('#output');
@@ -241,42 +235,51 @@ window.onload = function() {
   if (pattern != null) {
     let buffer = window.atob(pattern);
     let i = 0;
+    let row = 0;
+
     for (let color in COLORS) {
       if (color == 'empty') continue;
+
+      let drum = null;
+      for (let d of DRUM_KIT) {
+        if (d.color == color) {
+          drum = d;
+          break;
+        }
+      }
+      if (drum == null) continue;
+
       let p = color + ' ';
       let b = buffer.charCodeAt(i++);
       for (let col = 0; col < 8; col++) {
+        if ((b & 0x01) > 0) {
+          slots[col][row].drum = drum;
+        }
         p += ((b & 0x01) > 0) ? '*' : '-';
         b >>= 1;
       }
       b = buffer.charCodeAt(i++);
       for (let col = 8; col < 16; col++) {
+        if ((b & 0x01) > 0) {
+          slots[col][row].drum = drum;
+        }
         p += ((b & 0x01) > 0) ? '*' : '-';
         b >>= 1;
       }
-      output.innerHTML += p + "<br>";
+      row ++;
     }
-  } else {
-    output.innerHTML = 'No pattern';
   }
+  console.log(generateCode());
+  output.innerHTML = generateCode();
 
-/*
   canvas = document.querySelector('#canvas');
   ctx = canvas.getContext('2d');
+  draw(0);
 
   // pre-load the drum samples
   for (let drum of DRUM_KIT) {
     for (let sound of drum.sounds) {
       Slot.loadDrumSound(sound);
-    }
-  }
-
-  // create the slots
-  for (let i = 0; i < COLS; i++) {
-    slots.push([ ]);
-    for (let j = 0; j < ROWS; j++) {
-      let slot = new Slot(j, i);
-      slots[i].push(slot);
     }
   }
 
@@ -292,7 +295,6 @@ window.onload = function() {
       default:
     }
   }
-  */
 }
 
 
@@ -443,7 +445,6 @@ class Slot {
     request.onload = function() {
       context.decodeAudioData(request.response, function(buffer) {
         Slot.drumBuffers[name] = buffer;
-        console.log("loaded " + name);
       }, function () { console.log("error loading audio")});
     }
     request.send();
@@ -490,8 +491,8 @@ var DRUMS_ROLAND = [
   // purple
   {
     name : "clap",
-    vars : [ "clap", "clap", "clap", "clap", "clap" ],
-    sounds : [ "808/cp.mp3", "808/cp.mp3", "808/cp.mp3", "808/cp.mp3", "808/cp.mp3" ],
+    vars : [ "clap", "clap", "clap", "clap", "clap", "clap" ],
+    sounds : [ "808/cp.mp3", "808/cp.mp3", "808/cp.mp3", "808/cp.mp3", "808/cp.mp3", "808/cp.mp3" ],
     color : "purple"
   },
 

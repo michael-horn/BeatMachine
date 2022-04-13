@@ -3,10 +3,109 @@
 <head>
   <meta charset="utf-8">
   <title>Beat Machine v4</title>
+  <link rel="stylesheet" href="css/fontawesome.all.min.css">
+  
+  <style>
+  body {
+    background-color: #606060;
+    padding: 10px 30px;
+    color: white;
+    font-family: 'Helvetica';
+    font-size: 20px;
+  }
+
+  header {
+    border-top: 2px solid white;
+    border-bottom: 2px solid white;
+    display: flex;
+    width: 100%;
+    padding: 5px 0;
+  }
+
+
+  footer {
+    border-top: 2px solid white;
+    display: flex;
+    width: calc(100vw - 60px);
+    padding-top: 5px;
+    position: fixed;
+    bottom: 10px;
+  }
+
+  .project-title {
+    font-size: 30px;
+    border-bottom: 7px solid white;
+    position: relative;
+    top: 14px;
+    color: rgba(255, 255, 255, 0.5);
+    line-height: 175%;
+    display: flex;
+  }
+
+  .ball {
+    width: 25px;
+    height: 25px;
+    background-color: #f33a;
+    border-radius: 50%;
+    margin: 5px 0 0 -7px;
+    position: relative;
+    top: 5px;
+  }
+
+  .ball.blue { background-color: #34fa; }
+  .ball.green { background-color: #5f7a; }
+  .ball.orange { background-color: #fa0a; }
+  .ball.purple { background-color: #f7fa; }
+
+  .tempo-container, .swing-container {
+    font-size: 18px;
+    margin-right: 80px;
+  }
+
+  #tempo, #swing {
+    font-size: 40px;
+  }
+
+  #drumkit {
+    font-size: 50px;
+    font-weight: 800;
+  }
+
+  .toolbar {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    right: 0;
+    top: 200px;
+    border-top-left-radius: 5px;
+    border-bottom-left-radius: 5px;
+    padding: 5px;
+    background-color: #0008;
+  }
+
+  .toolbar button {
+    width: 40px;
+    height: 50px;
+    border: none;
+    outline: none;
+    background-color: transparent;
+    color: white;
+    font-size: 90%;
+  }
+
+  .toolbar button.hidden { display: none; }
+  .toolbar button:hover { color: #fff8; }
+  .toolbar button:active { color: white; }
+</style>
 </head>
 <body>
-  <div id="output">
-  </div>
+  <canvas id="canvas" width="640" height="240"></canvas>
+  <pre id="output"></pre>
+  <nav class="toolbar">
+    <button id="play-button" onclick="play()"><i class="fas fa-play"></i></button>
+    <button id="pause-button" onclick="pause()" class="hidden"><i class="fas fa-pause"></i></button>
+  </nav>
+
 </body>
 <script src="js/code.js"></script>
 </body>
