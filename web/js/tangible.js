@@ -52,7 +52,7 @@ var start_time = 0;
 var debug = false;
 var requeued = false;
 var qrcode = new QRCode(document.getElementById('qrcode'), {
-    text: "http://jindo.dev.naver.com/collie",
+    text: "https://michael-horn.github.io/BeatMachine/web/code.html",
     width: 150,
     height: 150,
     colorDark : "#000000",
@@ -405,21 +405,27 @@ function xToBeats(x) {
 function drawQRCode() {
   let buffer = new Uint8Array(6 * 2); // six colors * 2 bytes each
   let index = 0;
+  let binary = '';
   for (let color in COLORS) {
+    if (color == 'empty') continue;
     let row = 0;
     for (let i=0; i<8; i++) {
       if (columnHasColor(i, color)) row += Math.pow(2, i);
     }
     buffer[index++] = row;
+    binary += String.fromCharCode(row);
 
     row = 0;
     for (let i=8; i<16; i++) {
       if (columnHasColor(i, color)) row += Math.pow(2, i-8);
     }
     buffer[index++] = row;
+    binary += String.fromCharCode(row);
   }
+  let p = window.btoa(binary);
+  let url = "https://michael-horn.github.io/BeatMachine/web/code.html?pattern=" + p;
   qrcode.clear();
-  qrcode.makeCode("http://naver.com");
+  qrcode.makeCode(url);
 }
 
 
@@ -576,10 +582,10 @@ window.onload = function() {
     }
   }
 
-  midiInit();
   canvas.onmousedown = function(e) { }
   canvas.onmousemove = function(e) { }
   canvas.onmouseup = function(e) { }
+  drawQRCode();
 
   document.querySelector('.video-container').onclick = function(e) { }
   document.querySelector("#swing").innerHTML = newSwing + "%";
