@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <title>Drum Machine</title>
   <link rel="stylesheet" href="css/fontawesome.all.min.css">
+  <script src="js/jquery.min.js"></script>
+  <script src="js/qrcode.min.js"></script>
   <style>
 
 body {
@@ -130,9 +132,7 @@ footer {
 }
 
 #canvas {
-  background-color: transparent;
-}
-#canvas.cropped {
+  background-color: black;
   margin-top: 70px;
   width: calc(100vw - 300px);
 }
@@ -141,6 +141,15 @@ footer {
   display: none;
 }
 
+
+#qrcode {
+  width: 150px;
+  height: 150px;
+  position: absolute;
+  right: 70px;
+  bottom: 90px;
+  background-color: white;
+}
   </style>
 </head>
 <body>
@@ -162,17 +171,18 @@ footer {
     <button id="stop-video-button" class="hidden" onclick="stopVideo()"><i class="fas fa-video-slash"></i></button>
     <button id="play-button" onclick="play()"><i class="fas fa-play"></i></button>
     <button id="pause-button" onclick="pause()" class="hidden"><i class="fas fa-pause"></i></button>
-    <button id="clear-button" onclick="resetCrop()"><i class="fas fa-undo-alt"></i></button>
-    <button id="voice-button"><i class="fas fa-drum"></i></button>
+    <!-- <button id="clear-button" onclick="resetCrop()"><i class="fas fa-undo-alt"></i></button> -->
     <button id="debug-button" onclick="toggleDebug()"><i class="fas fa-th"></i></button>
     <button id="calibrate-button" class="hidden" onclick="calibrateColors()"><i class="fas fa-eye-dropper"></i></button>
   </nav>
 
   <div class="video-container">
     <!--img id="video" src="training.jpg" -->
-    <video id="video" width="640" height="480" preload loop muted></video>
-    <canvas id="canvas" width="640" height="480"></canvas>
+    <video id="video" preload loop muted></video>
+    <canvas id="canvas"></canvas>
   </div>
+
+  <div id="qrcode"></div>
 
   <div class="code-container hidden">
     <div class="code-dialog">
