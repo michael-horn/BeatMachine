@@ -1,65 +1,20 @@
-///--------------------------------------------------------------------
-/// INSTRUCTIONS
-///  1. Press 'v' to start / stop camera
-///  2. SHIFT + mouse drag to crop video stream around board
-///  3. Press 'q' to reset crop
-///  4. Press <space> to play / pause
-///  5. Press arrow keys to adjust crop position
-///  6. Press '<' and '>' keys to adjust swing
 //----------------------------------------------------------------------
 // use to calibrate the current camera setup
 //----------------------------------------------------------------------
 const ROWS = 5;
 const COLS = 16;
-var crop = [ 0, 0, 640, 480 ];
+const VWIDTH = 1280;   // camera width (pixels)
+const VHEIGHT = 720;   // camera height (pixels)
+
+var crop = [51, 211, 1222, 382];
 
 var bpm = 90.0, newBpm = 90.0;   // beats per minute
-var swing = 0, newSwing = 0;  // swing percentage
+var swing = 10, newSwing = 10;  // swing percentage
 
+// color distance threshold to prevent false positives
+var CUTOFF = 40;
 
-var DRUM_KIT = [
-  // blue
-  {
-    name : "kick",
-    vars : [ "high_tom", "mid_tom", "low_tom", "kick", "kick" ],
-    sounds : [ "ht.mp3", "mt.mp3", "lt.mp3", "bd.mp3", "bd.mp3" ],
-    color : [ 50, 50, 255 ]
-  },
-
-  // orange
-  {
-    name : "hat",
-    vars : [ "hat", "hat", "open_hat", "hat", "hat" ],
-    sounds : [ "ch.mp3", "ch.mp3", "oh.mp3", "ch.mp3", "ch.mp3" ],
-    color : [ 255, 150, 40 ]
-  },
-
-  // green
-  {
-    name : "snare",
-    vars : [ "snare", "snare", "snare", "snare", "snare" ],
-    sounds : [ "sd.mp3", "sd.mp3", "sd.mp3", "sd.mp3", "sd.mp3" ],
-    color : [ 90, 255, 150 ]
-  },
-
-  // purple
-  {
-    name : "clap",
-    vars : [ "clap", "clap", "clap", "clap", "clap" ],
-    sounds : [ "cp.mp3", "cp.mp3", "cp.mp3", "cp.mp3", "cp.mp3" ],
-    color : [ 255, 50, 200 ]
-  },
-
-  // red
-  {
-    name : "red",
-    vars : [ "cymbal", "cowbell", "rimshot", "cowbell", "rimshot" ],
-    sounds : [ "cy.mp3", "cb.mp3", "rs.mp3", "cb.mp3", "rs.mp3" ],
-    color : [ 255, 0, 0 ]
-  }
-];
-var EMPTY = { name : "empty", vars : [ ], sounds : [ ], color : [ 0, 0, 0 ] };
-
+var DRUM_KIT = DRUMS_ROLAND;
 
 var VAR_VALUES = {
   "kick" : 1,
@@ -75,6 +30,16 @@ var VAR_VALUES = {
   "cowbell" : 3
 };
 
+var COLORS = {
+  red : { color : [ 255, 0, 0 ], calibrated : [ 255, 93, 83 ] },
+  orange : { color : [ 255, 150, 40 ], calibrated : [ 255, 193, 120 ] },
+  yellow : { color : [ 255, 255, 0 ], calibrated : [ 255, 255, 215 ] },
+  green : { color : [ 90, 255, 150 ], calibrated : [ 202, 254, 176 ] },
+  blue : { color : [ 50, 50, 255 ], calibrated : [ 0, 141, 244 ] },
+  purple : { color : [ 255, 50, 200 ], calibrated : [ 255, 156, 188 ] },
+  empty : { color : [ 0, 0, 0], calibrated : [100, 100, 100 ] }
+};
+
 
 var context = new AudioContext();
 var playing = false;   // is beat machine playing or paused
@@ -82,15 +47,18 @@ var canvas;
 var ctx; // canvas rendering context
 var video;  // <video> element
 var videoStream = null;
-var dragging = false;
 var slots = []; // all of the balls recognized by the camera in this frame
 var start_time = 0;
 var debug = false;
-
-
-function isCropped() {
-  return (crop[0] > 0 || crop[1] > 0 || crop[2] < 640 || crop[3] < 480);
-}
+var requeued = false;
+var qrcode = new QRCode(document.getElementById('qrcode'), {
+    text: "http://jindo.dev.naver.com/collie",
+    width: 150,
+    height: 150,
+    colorDark : "#000000",
+    colorLight : "#ffffff",
+    correctLevel : QRCode.CorrectLevel.H
+});
 
 
 //------------------------------------------------------------------------
@@ -144,8 +112,6 @@ function scheduleSounds(delayBeats) {
       slots[i][j].scheduleSound(delayBeats);
     }
   }
-  //let bar = Math.round((now - start_time) / beatsToSeconds(4.0));
-  //let start = start_time + bar * beatsToSeconds(4.0);
 }
 
 
@@ -202,7 +168,13 @@ function startStopVideo() {
 
 function startVideo() {
   if (videoStream == null) {
-    navigator.mediaDevices.getUserMedia({ video: true })
+    navigator.mediaDevices.getUserMedia(
+      {
+        video: {
+          width: { min: VWIDTH },
+          height: { min: VHEIGHT }
+        }
+      })
       .then(function (s) {
         videoStream = s;
         video.srcObject = s;
@@ -282,7 +254,7 @@ function calibrateColors() {
       for (let i=0; i<COLS; i++) {
         for (let j=0; j<ROWS; j++) {
           let slot = slots[i][j];
-          if (slot.calibrate != null && slot.calibrate.name == drum.name) {
+          if (slot.calibrate != null && slot.calibrate == drum.color) {
             r += slot.scan[0];
             g += slot.scan[1];
             b += slot.scan[2];
@@ -291,9 +263,29 @@ function calibrateColors() {
         }
       }
       if (count > 0) {
-        drum.color = [ r/count, g/count, b/count ];
-        console.log(drum);
+        COLORS[drum.color].calibrated = [ r/count, g/count, b/count ];
+        console.log(COLORS[drum.color]);
       }
+    }
+
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    let count = 0;
+    for (let i=0; i<COLS; i++) {
+      for (let j=0; j<ROWS; j++) {
+        let slot = slots[i][j];
+        if (slot.calibrate == "empty") {
+          r += slot.scan[0];
+          g += slot.scan[1];
+          b += slot.scan[2];
+          count++;
+        }
+      }
+    }
+    if (count > 0) {
+      COLORS.empty.calibrated = [ r/count, g/count, b/count ];
+      console.log(COLORS.empty);
     }
   }
 }
@@ -308,48 +300,44 @@ function draw(beats) {
     let h = canvas.height;
     let cx = crop[0];
     let cy = crop[1];
-    let cw = Math.max(crop[2], 1);
-    let ch = Math.max(crop[3], 1);
+    let cw = crop[2];
+    let ch = crop[3];
     let bw = cw / COLS;
     let bh = ch / ROWS;
-    let m = bw * 0.4;
+    let m = bw * 0.45;
     let idata = null;
 
     ctx.save();
     {
-      ctx.clearRect(0, 0, w, h);
+      ctx.save();
+      {
+        ctx.scale(1, -1);
+        ctx.translate(0, -h);
+        ctx.clearRect(0, 0, w, h);
+        ctx.drawImage(video, cx, VHEIGHT - (cy + h), cw, ch, 0, 0, w, h);
 
-      if (dragging) {
-        ctx.drawImage(video, 0, 0, w, h);
-      } else {
-        ctx.drawImage(video, cx, cy, cw, ch, 0, 0, w, h);
-        cx = 0;
-        cy = 0;
-        cw = w;
-        ch = h;
       }
+      ctx.restore();
 
-      idata = ctx.getImageData(cx, cy, cw, ch);
-      if (dragging || debug) drawGrid(cx, cy, cw, ch);
+      idata = ctx.getImageData(0, 0, w, h);
+      if (debug) drawGrid(0, 0, w, h);
 
       // draw beat regions
-      if (isCropped()) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-        ctx.fillRect(cx, cy, bw * 4, ch);
-        ctx.fillRect(cx + bw * 8, cy, bw * 4, ch);
-      }
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      ctx.fillRect(0, 0, bw * 4, h);
+      ctx.fillRect(bw * 8, 0, bw * 4, h);
 
       for (let i=0; i<COLS; i++) {
         for (let j=0; j<ROWS; j++) {
           let bx = i * bw;
           let by = j * bh;
-          let scan = scanRect(idata, bx + m, by + m, bw - m * 2, bh - m * 2, cw);
-          let delta = colorDistance(EMPTY.color, scan);
-          let drum = EMPTY;
+          let scan = scanRect(idata, bx + m, by + m, bw - m * 2, bh - m * 2, w);
+          let delta = colorDistance(COLORS.empty.calibrated, scan);
+          let drum = null;
 
           for (let d of DRUM_KIT) {
-            let dist = colorDistance(d.color, scan);
-            if (dist < delta) {
+            let dist = colorDistance(COLORS[d.color].calibrated, scan);
+            if (dist < CUTOFF && dist < delta) {
               drum = d;
               delta = dist;
             }
@@ -357,18 +345,10 @@ function draw(beats) {
 
           slots[i][j].setDrum(drum);
           slots[i][j].scan = scan;
-
-
-          if (dragging) {
-            if (bw - m * 2 > 2) {
-              //ctx.fillStyle = colorString(scan);
-              ctx.fillStyle = colorString(drum.color);
-              ctx.beginPath();
-              ctx.arc(cx + bx + bw/2, cy + by + bh/2, bw - m * 2, 0, Math.PI * 2);
-              ctx.fill();
-            }
-          } else if (isCropped()) {
-            slots[i][j].draw(bx, by, bw, bh, debug);
+          if (!debug) {
+            slots[i][j].draw(bx, by, bw, bh);
+          } else {
+            slots[i][j].drawCalibration(bx, by, bw, bh);
           }
         }
       }
@@ -422,6 +402,39 @@ function xToBeats(x) {
 }
 
 
+function drawQRCode() {
+  let buffer = new Uint8Array(6 * 2); // six colors * 2 bytes each
+  let index = 0;
+  for (let color in COLORS) {
+    let row = 0;
+    for (let i=0; i<8; i++) {
+      if (columnHasColor(i, color)) row += Math.pow(2, i);
+    }
+    buffer[index++] = row;
+
+    row = 0;
+    for (let i=8; i<16; i++) {
+      if (columnHasColor(i, color)) row += Math.pow(2, i-8);
+    }
+    buffer[index++] = row;
+  }
+  console.log(buffer.length);
+  console.log(buffer[4]);
+  console.log(buffer[5]);
+  qrcode.clear();
+  qrcode.makeCode("http://naver.com");
+}
+
+
+function columnHasColor(col, color) {
+  for (let row=0; row<ROWS; row++) {
+    let slot = slots[col][row];
+    if (slot.drum != null && slot.drum.color == color) return true;
+  }
+  return false;
+}
+
+
 //------------------------------------------------------------------------
 // while playing redraw the screen and schedule each new measure
 //------------------------------------------------------------------------
@@ -460,6 +473,7 @@ function tick(timestamp) {
     beats = getCurrentBeat();
     if (beats > 3.5 && !requeued) {
       scheduleSounds(4.0 - beats);
+      drawQRCode();
       requeued = true;
     }
     else if (beats < 1 && requeued) {
@@ -468,33 +482,6 @@ function tick(timestamp) {
   }
   if (isRunning() || playing) window.requestAnimationFrame(tick);
 
-}
-let requeued = false;
-
-
-
-function resetCrop() {
-  crop = [ 0, 0, 640, 480 ];
-  canvas.width = 640;
-  canvas.height = 480;
-  document.querySelector('#canvas').classList.remove('cropped');
-  draw();
-  saveState();
-}
-
-
-function saveState() {
-  localStorage.setItem('crop', JSON.stringify(crop));
-}
-
-
-function loadState() {
-  if (localStorage.getItem('crop') != null) {
-    crop = JSON.parse(localStorage.getItem('crop'));
-    canvas.width = crop[2];
-    canvas.height = crop[3];
-    document.querySelector('#canvas').classList.add('cropped');
-  }
 }
 
 
@@ -516,7 +503,7 @@ function generateCode() {
       code += 'playNote(' + line + ', beats = 0.25)\n';
     }
     else {
-      code += 'playNote([ ' + line + ' ], beats = 0.25)\n';
+      code += 'playNote([ ' + line.join(', ') + ' ], beats = 0.25)\n';
     }
   }
   for (let v of vars) {
@@ -543,12 +530,33 @@ function hideCode() {
 }
 
 
+function swapDrums() {
+  if (DRUM_KIT === DRUMS_ROLAND) {
+    DRUM_KIT = DRUMS_ROCK;
+    document.querySelector('#drumkit').innerHTML = 'Rock Drumkit';
+  } else {
+    DRUM_KIT = DRUMS_ROLAND;
+    document.querySelector('#drumkit').innerHTML = 'Roland 808';
+  }
+  for (let drum of DRUM_KIT) {
+    for (let sound of drum.sounds) {
+      Slot.loadDrumSound(sound);
+    }
+  }
+}
+
+
 window.onload = function() {
   video = document.querySelector("#video");
   canvas = document.querySelector('#canvas');
-  ctx = canvas.getContext('2d');
 
-  loadState();
+  canvas.width = crop[2];
+  canvas.height = crop[3];
+  video.width = VWIDTH;
+  video.height = VHEIGHT;
+  DRUM_KIT = DRUMS_ROLAND;
+
+  ctx = canvas.getContext('2d');
 
   // pre-load the drum samples
   for (let drum of DRUM_KIT) {
@@ -557,97 +565,82 @@ window.onload = function() {
     }
   }
 
-
   // create the slots
   for (let i = 0; i < COLS; i++) {
     slots.push([ ]);
     for (let j = 0; j < ROWS; j++) {
       let slot = new Slot(j, i);
       slots[i].push(slot);
-      if (i % ROWS == j) {
-        slot.calibrate = DRUM_KIT[ i % DRUM_KIT.length ];
+      if (j == 2 && i > 4 && i <= 10) {
+        slot.calibrate = DRUM_KIT[ i - 5 ].color;
+      } else {
+        slot.calibrate = "empty";
       }
     }
   }
 
   midiInit();
-  let downX = -1, downY = -1;
-  canvas.onmousedown = function(e) {
-    downX = e.offsetX;
-    downY = e.offsetY;
-//    if (e.shiftKey) {
-      dragging = true;
-      document.querySelector('#canvas').classList.remove('cropped');
-      canvas.width = 640;
-      canvas.height = 480;
-      crop[0] = downX;
-      crop[1] = downY;
-      crop[2] = 0;
-      crop[3] = 0;
-//    }
-  }
-  canvas.onmousemove = function(e) {
-    if (dragging) {
-      crop[2] = e.offsetX - crop[0];
-      crop[3] = e.offsetY - crop[1];
-    }
-  }
-  canvas.onmouseup = function(e) {
-    if (dragging && crop[2] > 0 && crop[3] > 0) {
-      document.querySelector('#canvas').classList.add('cropped');
-      canvas.width = crop[2];
-      canvas.height = crop[3];
-      saveState();
-    } else {
-      console.log('clicked on canvas');
-    }
-    draw();
-  }
+  canvas.onmousedown = function(e) { }
+  canvas.onmousemove = function(e) { }
+  canvas.onmouseup = function(e) { }
 
-  document.querySelector('.video-container').onclick = function(e) {
-    if (downX < 0) resetCrop();
-    dragging = false;
-    downX = -1;
-    downY = -1;
-  }
-
+  document.querySelector('.video-container').onclick = function(e) { }
+  document.querySelector("#swing").innerHTML = newSwing + "%";
 
   document.onkeydown = function(k) {
+    if (k.repeat) return;
+    console.log(k.keyCode);
     switch(k.keyCode) {
 
+      case 81: playPause(); break;
+      case 83: tempoUp(); break;
+      case 73: tempoDown(); break;
+      case 87: swapDrums(); break;
+      case 65: toggleCode(); break;
+
+/*
       case 86: Slot.previewDrumSound('ch.mp3'); break; // YELLOW DRUM
       case 88: Slot.previewDrumSound('rs.mp3'); break; // RED DRUM
       case 73: Slot.previewDrumSound('cp.mp3'); break; // WHITE
       case 53: Slot.previewDrumSound('sd.mp3'); break; // GREEN
       case 90: Slot.previewDrumSound('bd.mp3'); break; // BLUE
+*/
 
+      case 38: crop[1] -= 1; break;
+      case 40: crop[1] += 1; break;
+      case 39: crop[0] += 1; break;
+      case 37: crop[0] -= 1; break;
+      case 187: zoomIn(); break; // '+'
+      case 189: zoomOut(); break; // '-'
 
-      case 38: crop[1] -= 1; saveState(); break;
-      case 40: crop[1] += 1; saveState(); break;
-      case 39: crop[0] += 1; saveState(); break;
-      case 37: crop[0] -= 1; saveState(); break;
-      case 67: toggleCode(); break // 'c'
-      //case 81: resetCrop(); break;  // 'q'
-
-      case 75: tempoUp(); break;
-      case 187: tempoUp(); break;  // '+'
-
-      case 81: tempoDown(); break;
-      case 189: tempoDown(); break;  // '-'
-
-      case 83:
-      case 188: swingDown(); break; // '<'
-
-      case 65:
-      case 190: swingUp(); break; // '>'
+      //case 188: swingDown(); break; // '<'
+      //case 190: swingUp(); break; // '>'
+      case 188: CUTOFF--; console.log(CUTOFF); break; // '<'
+      case 190: CUTOFF++; console.log(CUTOFF); break; // '>'
 
       //case 70: console.log(crop); break;  // 'f'
       //case 86: startStopVideo(); break;  // 'v'
       case 32: playPause(); break;  // <space>
       default:
-        console.log(k.keyCode);
     }
   }
+}
+
+
+function zoomIn() {
+  crop[2] *= 0.98;
+  crop[3] *= 0.98;
+  canvas.width = crop[2];
+  canvas.height = crop[3];
+  console.log(crop);
+}
+
+function zoomOut() {
+  crop[2] /= 0.98;
+  crop[3] /= 0.98;
+  canvas.width = crop[2];
+  canvas.height = crop[3];
+  console.log(crop);
 }
 
 
@@ -683,19 +676,19 @@ class Slot {
   constructor(row, col) {
     this.row = row;
     this.col = col;
-    this.drum = EMPTY;
+    this.drum = null;
     this._gain = null;
     this.calibrate = null;
     this.scan = [ 0, 0, 0 ];
   }
 
   isEmpty() {
-    return (this.drum == null || this.drum.name == "empty");
+    return this.drum == null;
   }
 
 
-  draw(bx, by, bw, bh, debug) {
-    if (!debug && this.isEmpty()) return;
+  draw(bx, by, bw, bh) {
+    if (this.isEmpty()) return;
 
     let cb = getCurrentBeat();
     let mb = this.col * 0.25;
@@ -703,37 +696,39 @@ class Slot {
     ctx.save();
     {
       let m = this.isEmpty() ? bw * 0.45 : bw * 0.3;
-      ctx.fillStyle = highlight ? 'white' : colorString(this.drum.color);
+      ctx.fillStyle = highlight ? 'white' : colorString(COLORS[this.drum.color].color);
       ctx.beginPath();
       ctx.arc(bx + bw/2, by + bh/2, bw - m * 2, 0, Math.PI * 2);
       ctx.fill();
-      if (debug && this.calibrate != null) {
-        ctx.strokeStyle = colorString(this.calibrate.color);
-        ctx.lineWidth = 5;
-        ctx.strokeRect(bx, by, bw, bh);
-      }
     }
     ctx.restore();
   }
 
+  drawCalibration(bx, by, bw, bh) {
+    if (this.calibrate != null && this.calibrate != 'empty') {
+      ctx.save();
+      ctx.strokeStyle = colorString(COLORS[this.calibrate].color);
+      ctx.lineWidth = 8;
+      ctx.strokeRect(bx, by, bw, bh);
+      ctx.restore();
+    }
+  }
+
   setDrum(drum) {
-    if (drum.name != this.drum.name) {
+    if (drum != this.drum) {
       this.drum = drum;
       this.cancelSound();
       if (playing) this.scheduleSound(0);
     }
   }
 
-
   secondsToBeats(s) {
     return s * bpm / 60.0;
   }
 
-
   beatsToSeconds(beats) {
     return 60.0 * beats / bpm;
   }
-
 
   getAudioBuffer() {
     if (this.drum == null) {
@@ -744,7 +739,6 @@ class Slot {
     }
   }
 
-
   previewSound() {
     if (!playing) {
       this.cancelSound();
@@ -752,18 +746,16 @@ class Slot {
     }
   }
 
-
   scheduleSound(delayBeats) {
+    if (this.drum == null) return;
     let swingBeat = 0.25;
     let swingVal = 0.5 + (swing / 100.0) * 0.3;
     if (this.col % 2 == 1) swingBeat = 0.5 * swingVal;
     let startBeat = this.col * 0.25 + (swingBeat - 0.25);
     let currBeat = getCurrentBeat();
     let repeatCount = 1;
-    if (this.drum.name == "hat" && this.row == 0) {
-      repeatCount = 3;
-    } else if (this.drum.name == "hat" && this.row == 1) {
-      repeatCount = 2;
+    if (this.drum.name == "stutter_hat") {
+      repeatCount = (this.row % 2 == 1) ? 2 : 3;
     }
     if (delayBeats > 0) {
       this.playSound(this.beatsToSeconds(delayBeats + startBeat), repeatCount);
@@ -774,7 +766,7 @@ class Slot {
 
 
   playSound(when, repeatCount = 1) {
-    if (this.drum == null || this.drum.name === "empty") return;
+    if (this.drum == null) return;
     let dest = context.destination;
 
     let buffer = this.getAudioBuffer();
@@ -841,3 +833,107 @@ class Slot {
   }
 
 }
+
+
+var DRUMS_ROLAND = [
+  // blue
+  {
+    name : "kick",
+    //vars : [ "high_tom", "mid_tom", "low_tom", "kick", "kick" ],
+    //sounds : [ "ht.mp3", "mt.mp3", "lt.mp3", "bd.mp3", "bd.mp3" ],
+    vars : [ "kick", "kick", "kick", "kick", "kick" ],
+    sounds : [ "808/bd.mp3", "808/bd.mp3", "808/bd.mp3", "808/bd.mp3", "808/bd.mp3" ],
+    color : "blue"
+  },
+
+  // orange
+  {
+    name : "hat",
+    vars : [ "open_hat", "hat", "hat", "hat", "hat" ],
+    sounds : [ "808/oh.mp3", "808/ch.mp3", "808/ch.mp3", "808/ch.mp3", "808/ch.mp3" ],
+    color : "orange"
+  },
+
+  // yellow
+  {
+    name : "stutter_hat",
+    vars : [ "hat", "hat", "hat", "hat", "hat" ],
+    sounds : [ "808/ch.mp3", "808/ch.mp3", "808/ch.mp3", "808/ch.mp3", "808/ch.mp3" ],
+    color : "yellow"
+  },
+
+  // green
+  {
+    name : "snare",
+    vars : [ "snare", "snare", "snare", "snare", "snare" ],
+    sounds : [ "808/sd.mp3", "808/sd.mp3", "808/sd.mp3", "808/sd.mp3", "808/sd.mp3" ],
+    color : "green"
+  },
+
+  // purple
+  {
+    name : "clap",
+    vars : [ "clap", "clap", "clap", "clap", "clap" ],
+    sounds : [ "808/cp.mp3", "808/cp.mp3", "808/cp.mp3", "808/cp.mp3", "808/cp.mp3" ],
+    color : "purple"
+  },
+
+  // red
+  {
+    name : "rimshot",
+    vars : [ "rimshot", "rimshot", "rimshot", "rimshot", "rimshot" ],
+    sounds : [ "808/rs.mp3", "808/rs.mp3", "808/rs.mp3", "808/rs.mp3", "808/rs.mp3" ],
+    color : "red"
+  }
+];
+
+
+var DRUMS_ROCK = [
+  // blue
+  {
+    name : "kick",
+    vars : [ "kick", "kick", "kick", "kick", "kick" ],
+    sounds : [ "rock/kick.wav", "rock/kick.wav", "rock/kick.wav", "rock/kick.wav", "rock/kick.wav" ],
+    color : "blue"
+  },
+
+  // orange
+  {
+    name : "hat",
+    vars : [ "open_hat", "hat", "hat", "hat", "hat" ],
+    sounds : [ "rock/oh.wav", "rock/ch.wav", "rock/ch.wav", "rock/ch.wav", "rock/ch.wav" ],
+    color : "orange"
+  },
+
+  // yellow
+  {
+    name : "stutter_hat",
+    vars : [ "hat", "hat", "hat", "hat", "hat" ],
+    sounds : [ "rock/ch.wav", "rock/ch.wav", "rock/ch.wav", "rock/ch.wav", "rock/ch.wav" ],
+    color : "yellow"
+  },
+
+  // green
+  {
+    name : "snare",
+    vars : [ "snare", "snare", "snare", "snare", "snare" ],
+    sounds : [ "rock/sd.wav", "rock/sd.wav", "rock/sd.wav", "rock/sd.wav", "rock/sd.wav" ],
+    color : "green"
+  },
+
+  // purple
+  {
+    name : "clap",
+    vars : [ "clap", "clap", "clap", "clap", "clap" ],
+    sounds : [ "rock/cp.wav", "rock/cp.wav", "rock/cp.wav", "rock/cp.wav", "rock/cp.wav" ],
+    color : "purple"
+  },
+
+  // red
+  {
+    name : "shaker",
+    vars : [ "shaker", "shaker", "shaker", "shaker", "shaker" ],
+    sounds : [ "rock/shaker.wav", "rock/shaker.wav", "rock/shaker.wav", "rock/shaker.wav", "rock/shaker.wav" ],
+    color : "red"
+  }
+];
