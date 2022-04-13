@@ -418,9 +418,6 @@ function drawQRCode() {
     }
     buffer[index++] = row;
   }
-  console.log(buffer.length);
-  console.log(buffer[4]);
-  console.log(buffer[5]);
   qrcode.clear();
   qrcode.makeCode("http://naver.com");
 }
